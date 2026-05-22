@@ -26,20 +26,20 @@ logger = logging.getLogger(__name__)
 # ==============================================================================
 # CONFIGURACIÓN DE ACCESO Y CREDENCIALES
 # ==============================================================================
-# IMPORTANTE: Reemplaza estos valores con tus credenciales o configúralas
-# como variables de entorno (es la práctica recomendada en producción).
-DB_USER = os.environ.get("DB_USER", "ADMIN")
-DB_PASSWORD = os.environ.get("DB_PASSWORD", "Password123*")
-DB_DSN = os.environ.get("DB_DSN", "r9mhb9kr53smcwqp_high") # Ej: db2025_medium (definido en tnsnames.ora)
-WALLET_LOCATION = os.environ.get("WALLET_LOCATION", "wallet/Wallet_R9MHB9KR53SMCWQP") # Ruta a la carpeta del Wallet descomprimido
+# Configura las variables de entorno en un archivo .env (ver .env.example).
+# NUNCA edites valores por defecto con credenciales reales.
+DB_USER = os.environ["DB_USER"]
+DB_PASSWORD = os.environ["DB_PASSWORD"]
+DB_DSN = os.environ["DB_DSN"]
+WALLET_LOCATION = os.environ["WALLET_LOCATION"]
 
 # Convertir la ruta a absoluta para mayor compatibilidad (tanto en Windows como en Linux/WSL)
-if WALLET_LOCATION and not os.path.isabs(WALLET_LOCATION):
+if not os.path.isabs(WALLET_LOCATION):
     WALLET_LOCATION = os.path.abspath(WALLET_LOCATION)
 
 # Contraseña de la wallet (para descifrar ewallet.p12 o ewallet.pem en mutual TLS).
-# Si no está en las variables de entorno, por defecto intenta usar la misma contraseña de la base de datos (DB_PASSWORD).
-WALLET_PASSWORD = os.environ.get("WALLET_PASSWORD", DB_PASSWORD)
+# Opcional: si no se define, se usa cadena vacía.
+WALLET_PASSWORD = os.environ.get("WALLET_PASSWORD", "")
 
 # Tamaño del lote para inserciones masivas
 BATCH_SIZE = 1000

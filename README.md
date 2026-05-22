@@ -97,8 +97,8 @@ Edita `.env` con tus valores:
 |--------------------|-------------------------------------------------------|-------------------------------------|
 | `DB_USER`          | Usuario de la base de datos Oracle                    | `ADMIN`                             |
 | `DB_PASSWORD`      | Contraseña del usuario                                | `TuPasswordSegura123`               |
-| `DB_DSN`           | TNS name (definido en `tnsnames.ora` dentro del wallet) | `r9mhb9kr53smcwqp_high`         |
-| `WALLET_LOCATION`  | Ruta a la carpeta del Wallet descomprimido            | `wallet/Wallet_R9MHB9KR53SMCWQP`   |
+| `DB_DSN`           | TNS name (definido en `tnsnames.ora` dentro del wallet) | `tu_base_high`                  |
+| `WALLET_LOCATION`  | Ruta a la carpeta del Wallet descomprimido            | `wallet/Wallet_TU_BASE`            |
 | `WALLET_PASSWORD`  | Contraseña del Wallet (opcional, por defecto `DB_PASSWORD`) |                              |
 
 ### Wallet de Oracle
@@ -107,7 +107,7 @@ Coloca los archivos del Wallet (descomprimido del `.zip` descargado desde OCI) e
 
 ```
 wallet/
-├── Wallet_R9MHB9KR53SMCWQP/
+├── Wallet_TU_BASE/
 │   ├── tnsnames.ora
 │   ├── ewallet.p12
 │   ├── keystore.jks
@@ -171,7 +171,7 @@ DB_USER = os.environ.get("DB_USER")
 
 # ❌ Incorrecto (hardcodea credenciales)
 DB_USER = "ADMIN"
-DB_PASSWORD = "Password123*"   # ¡Esto filtra la contraseña en Git!
+DB_PASSWORD = "mi-contraseña"   # ¡Esto filtra la contraseña en Git!
 ```
 
 Para eliminar los valores hardcodeados del script, cambia las líneas ~31-34 de `insert_oracle.py` para que no tengan valores por defecto sensibles:
