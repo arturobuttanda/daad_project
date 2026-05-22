@@ -1,0 +1,14 @@
+# Core
+oracledb>=4.0.0
+
+# Scraper (camelcamelcamel.com)
+playwright>=1.49.0
+curl_cffi>=0.7.0
+beautifulsoup4>=4.12.0
+lxml>=5.0.0
+numpy>=2.0.0
+Pillow>=10.0.0
+python-dateutil>=2.9.0
+
+# Optional: carga automática de .env (pip install python-dotenv)
+# python-dotenv>=1.0.0

@@ -1,0 +1,49 @@
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+*.egg
+*.egg-info/
+dist/
+build/
+*.whl
+
+# Virtual environment
+.venv/
+venv/
+env/
+
+# Environment variables (credentials, API keys, secrets)
+.env
+.env.*
+!.env.example
+
+# Generated data files (local scraped output, never committed)
+productos_*.json
+prueba.json
+*.partial.json
+
+# Separate project (not part of this repo)
+agency-agents/
+
+# Browser profiles (persistent Playwright sessions with cookies)
+.camelcamel_playwright_profile/
+
+# Oracle Wallet (credentials, certificates, private keys)
+wallet/
+
+
+# Logs
+*.log
+
+# OS
+.DS_Store
+Thumbs.db
+
+# IDE / editor
+.vscode/
+.idea/
+*.swp
+*.swo
+*~

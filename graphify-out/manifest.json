@@ -1,0 +1,42 @@
+{
+  "/mnt/c/Users/arturobuttanda/Desktop/daad/scripts/insert_oracle.py": {
+    "mtime": 1779262637.392379,
+    "ast_hash": "eace922d4b0833cc85dbf7c75671bb04",
+    "semantic_hash": ""
+  },
+  "/mnt/c/Users/arturobuttanda/Desktop/daad/scripts/schema.sql": {
+    "mtime": 1779261041.1354785,
+    "ast_hash": "af4f2c13d1064b899dbb58847792f46b",
+    "semantic_hash": ""
+  },
+  "/mnt/c/Users/arturobuttanda/Desktop/daad/scripts/scrape_camelcamelcamel.py": {
+    "mtime": 1779421628.2849233,
+    "ast_hash": "5d72cfb6773424e7a4f2bad2e12e94c1",
+    "semantic_hash": ""
+  },
+  "/mnt/c/Users/arturobuttanda/Desktop/daad/README.md": {
+    "mtime": 1779422385.7157812,
+    "ast_hash": "d3e7d2c5a8a2a8e233687c8c149b5e4f",
+    "semantic_hash": ""
+  },
+  "/mnt/c/Users/arturobuttanda/Desktop/daad/.agents/rules/graphify.md": {
+    "mtime": 1779259421.1205635,
+    "ast_hash": "a0e4d192b9e2e17256124dbfc8e24e6a",
+    "semantic_hash": ""
+  },
+  "/mnt/c/Users/arturobuttanda/Desktop/daad/.agents/workflows/graphify.md": {
+    "mtime": 1779259421.1225705,
+    "ast_hash": "84de69efd46ab0b8430393bd4188f8f2",
+    "semantic_hash": ""
+  },
+  "/mnt/c/Users/arturobuttanda/Desktop/daad/scripts/requirements-camelcamelcamel.txt": {
+    "mtime": 1779421628.2839224,
+    "ast_hash": "76aa3cd9bddfff578d25a4f04c77de03",
+    "semantic_hash": ""
+  },
+  "/mnt/c/Users/arturobuttanda/Desktop/daad/scripts/_popular.html": {
+    "mtime": 1779248895.7255857,
+    "ast_hash": "915840782e67cca079f43fd6053f51d4",
+    "semantic_hash": ""
+  }
+}
