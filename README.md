@@ -202,4 +202,4 @@ load_dotenv()  # Carga variables desde .env
 
 ---
 
-**Autor:** Arturo Buttanda
+**Autor:** Arturo Buttanda & Ricardo Hernandez
