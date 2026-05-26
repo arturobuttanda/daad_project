@@ -1,5 +1,9 @@
 # Core
 oracledb>=4.0.0
+fastapi>=0.111.0
+uvicorn[standard]>=0.30.0
+python-dotenv>=1.0.0
+passlib>=1.7.4
 
 # Scraper (camelcamelcamel.com)
 playwright>=1.49.0
@@ -10,5 +14,4 @@ numpy>=2.0.0
 Pillow>=10.0.0
 python-dateutil>=2.9.0
 
-# Optional: carga automática de .env (pip install python-dotenv)
-# python-dotenv>=1.0.0
+# Optional: carga automatica de .env

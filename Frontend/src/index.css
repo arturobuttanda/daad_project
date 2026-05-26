@@ -1,0 +1,154 @@
+@import url("https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@300;400;500;600;700&family=IBM+Plex+Sans:wght@300;400;500;600;700&display=swap");
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --color-ink: #0b1b2b;
+  --color-sand: #f6f1e7;
+  --color-brass: #f7c948;
+  --color-copper: #f26b5b;
+  --color-ocean: #1a7f8f;
+  --color-mint: #9be3c5;
+  --color-cloud: #fffaf2;
+  --color-shadow: rgba(11, 27, 43, 0.16);
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#root {
+  width: 100%;
+  min-height: 100%;
+}
+
+body {
+  font-family: "IBM Plex Sans", system-ui, sans-serif;
+  color: var(--color-ink);
+  background:
+    radial-gradient(circle at 12% 18%, rgba(155, 227, 197, 0.35), transparent 45%),
+    radial-gradient(circle at 88% 12%, rgba(242, 107, 91, 0.25), transparent 40%),
+    radial-gradient(circle at 72% 85%, rgba(247, 201, 72, 0.3), transparent 50%),
+    linear-gradient(155deg, #fff6ea 0%, #f6efe3 55%, #f2e7d9 100%);
+  min-height: 100vh;
+  overflow-x: hidden;
+}
+
+a {
+  color: inherit;
+  text-decoration: none;
+}
+
+.page-wrap {
+  width: min(calc(100% - 1.5rem), 1280px);
+  margin: 0 auto;
+}
+
+@layer components {
+  .glass-panel {
+    @apply rounded-3xl border border-white/60 bg-white/70 shadow-soft backdrop-blur;
+  }
+
+  .input-field {
+    @apply w-full rounded-2xl border border-sand bg-white/80 px-4 py-3 text-sm text-ink shadow-soft outline-none transition focus:border-ocean focus:ring-2 focus:ring-[rgba(31,78,95,0.2)];
+  }
+
+  .primary-button {
+    @apply inline-flex items-center justify-center rounded-2xl bg-ocean px-5 py-3 text-sm font-semibold text-white shadow-glow transition hover:-translate-y-0.5 hover:shadow-lg;
+  }
+
+  .secondary-button {
+    @apply inline-flex items-center justify-center rounded-2xl border border-ocean bg-white/80 px-4 py-2 text-sm font-semibold text-ocean transition hover:bg-white;
+  }
+
+  .tag {
+    @apply inline-flex items-center rounded-full bg-[rgba(247,201,72,0.3)] px-3 py-1 text-xs font-semibold uppercase tracking-wide text-ink;
+  }
+}
+
+@keyframes float-slow {
+  0% {
+    transform: translateY(0) translateX(0);
+  }
+  50% {
+    transform: translateY(-12px) translateX(6px);
+  }
+  100% {
+    transform: translateY(0) translateX(0);
+  }
+}
+
+@keyframes float-fast {
+  0% {
+    transform: translateY(0) translateX(0);
+  }
+  50% {
+    transform: translateY(8px) translateX(-8px);
+  }
+  100% {
+    transform: translateY(0) translateX(0);
+  }
+}
+
+@keyframes shimmer {
+  0% {
+    background-position: 0% 50%;
+  }
+  100% {
+    background-position: 100% 50%;
+  }
+}
+
+.orb {
+  position: absolute;
+  border-radius: 999px;
+  filter: blur(20px);
+  opacity: 0.7;
+  z-index: 0;
+}
+
+.orb-amber {
+  width: 190px;
+  height: 190px;
+  right: -40px;
+  top: -60px;
+  background: radial-gradient(circle, rgba(247, 201, 72, 0.9), rgba(247, 201, 72, 0.2));
+  animation: float-slow 9s ease-in-out infinite;
+}
+
+.orb-coral {
+  width: 150px;
+  height: 150px;
+  left: -30px;
+  bottom: -40px;
+  background: radial-gradient(circle, rgba(242, 107, 91, 0.8), rgba(242, 107, 91, 0.15));
+  animation: float-fast 7s ease-in-out infinite;
+}
+
+.orb-teal {
+  width: 120px;
+  height: 120px;
+  right: 25%;
+  top: 45%;
+  background: radial-gradient(circle, rgba(26, 127, 143, 0.75), rgba(26, 127, 143, 0.15));
+  animation: float-slow 8s ease-in-out infinite;
+}
+
+.shine-card {
+  background: linear-gradient(120deg, rgba(255, 255, 255, 0.9), rgba(255, 250, 242, 0.7), rgba(255, 255, 255, 0.85));
+  background-size: 200% 200%;
+  animation: shimmer 8s ease-in-out infinite;
+}
+
+.lift-card {
+  transition: transform 0.3s ease, box-shadow 0.3s ease;
+}
+
+.lift-card:hover {
+  transform: translateY(-6px);
+  box-shadow: 0 20px 40px -28px rgba(11, 27, 43, 0.5);
+}
