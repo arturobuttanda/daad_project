@@ -20,6 +20,14 @@ WALLET_PATH = os.environ.get("WALLET_PATH") or os.environ.get("WALLET_LOCATION")
 WALLET_PASSWORD = os.environ.get("WALLET_PASSWORD", "")
 
 if not WALLET_PATH:
+    _wallet_root = ROOT_DIR / "wallet"
+    if _wallet_root.is_dir():
+        for _child in sorted(_wallet_root.iterdir()):
+            if _child.is_dir() and (_child / "tnsnames.ora").is_file():
+                WALLET_PATH = str(_child)
+                break
+
+if not WALLET_PATH:
     raise RuntimeError("WALLET_PATH no definido en .env")
 
 wallet_location = Path(WALLET_PATH)

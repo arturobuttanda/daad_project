@@ -37,6 +37,14 @@ WALLET_PASSWORD = os.environ.get("WALLET_PASSWORD", "")
 FRONTEND_URL = os.environ.get("FRONTEND_URL", "http://localhost:5173")
 
 if not WALLET_PATH:
+  _wallet_root = ROOT_DIR / "wallet"
+  if _wallet_root.is_dir():
+    for _child in sorted(_wallet_root.iterdir()):
+      if _child.is_dir() and (_child / "tnsnames.ora").is_file():
+        WALLET_PATH = str(_child)
+        break
+
+if not WALLET_PATH:
   raise RuntimeError("WALLET_PATH no definido en .env")
 
 wallet_location = Path(WALLET_PATH)

@@ -11,7 +11,10 @@ import json
 import logging
 import argparse
 from datetime import datetime, timedelta
+from pathlib import Path
+
 import oracledb  # type: ignore[import-not-found]
+from dotenv import load_dotenv
 
 # Configuración de Logging para producción
 logging.basicConfig(
@@ -28,17 +31,41 @@ logger = logging.getLogger(__name__)
 # ==============================================================================
 # Configura las variables de entorno en un archivo .env (ver .env.example).
 # NUNCA edites valores por defecto con credenciales reales.
+
+# Cargar .env automáticamente desde la raíz del proyecto
+_project_root = Path(__file__).resolve().parents[2]
+load_dotenv(_project_root / ".env")
+
+
+def _find_wallet_dir() -> str | None:
+    """Busca automáticamente la wallet en wallet/<subcarpeta>/tnsnames.ora."""
+    wallet_root = _project_root / "wallet"
+    if wallet_root.is_dir():
+        for child in sorted(wallet_root.iterdir()):
+            if child.is_dir() and (child / "tnsnames.ora").is_file():
+                return str(child.resolve())
+    legacy = _project_root / "Backend" / "ConexionDB" / "Wallet"
+    if (legacy / "tnsnames.ora").is_file():
+        return str(legacy.resolve())
+    return None
+
+
 DB_USER = os.environ["DB_USER"]
 DB_PASSWORD = os.environ["DB_PASSWORD"]
 DB_DSN = os.environ["DB_DSN"]
-WALLET_LOCATION = os.environ["WALLET_LOCATION"]
+WALLET_LOCATION = os.environ.get("WALLET_LOCATION") or _find_wallet_dir()
+if not WALLET_LOCATION:
+    raise RuntimeError(
+        "WALLET_LOCATION no definido. "
+        "Configúralo en .env o coloca un wallet en wallet/<carpeta>/"
+    )
 
 # Convertir la ruta a absoluta para mayor compatibilidad (tanto en Windows como en Linux/WSL)
 if not os.path.isabs(WALLET_LOCATION):
     WALLET_LOCATION = os.path.abspath(WALLET_LOCATION)
 
 # Contraseña de la wallet (para descifrar ewallet.p12 o ewallet.pem en mutual TLS).
-# Opcional: si no se define, se usa cadena vacía.
+# Opcional: por defecto se usa cadena vacía.
 WALLET_PASSWORD = os.environ.get("WALLET_PASSWORD", "")
 
 # Tamaño del lote para inserciones masivas

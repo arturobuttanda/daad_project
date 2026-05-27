@@ -21,6 +21,7 @@ env/
 
 # Generated data files (local scraped output, never committed)
 productos_*.json
+vendedores_demo.txt
 prueba.json
 *.partial.json
 

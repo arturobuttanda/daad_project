@@ -57,7 +57,22 @@ DB_PASSWORD = os.environ["DB_PASSWORD"]
 DB_DSN = os.environ["DB_DSN"]
 WALLET_LOCATION = os.environ.get("WALLET_LOCATION") or os.environ.get("WALLET_PATH")
 if not WALLET_LOCATION:
-    WALLET_LOCATION = str(Path(__file__).resolve().parents[2] / "Backend" / "ConexionDB" / "Wallet")
+    _project_root = Path(__file__).resolve().parents[2]
+    _wallet_root = _project_root / "wallet"
+    if _wallet_root.is_dir():
+        for _child in sorted(_wallet_root.iterdir()):
+            if _child.is_dir() and (_child / "tnsnames.ora").is_file():
+                WALLET_LOCATION = str(_child.resolve())
+                break
+if not WALLET_LOCATION:
+    _legacy = Path(__file__).resolve().parents[2] / "Backend" / "ConexionDB" / "Wallet"
+    if (_legacy / "tnsnames.ora").is_file():
+        WALLET_LOCATION = str(_legacy.resolve())
+if not WALLET_LOCATION:
+    raise RuntimeError(
+        "WALLET_LOCATION no definido. "
+        "Configúralo en .env o coloca un wallet en wallet/<carpeta>/"
+    )
 WALLET_PASSWORD = os.environ.get("WALLET_PASSWORD", "")
 
 DEFAULT_PRODUCTOS = Path.home() / "Downloads" / "Productos.csv"
