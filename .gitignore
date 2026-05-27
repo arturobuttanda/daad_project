@@ -47,3 +47,19 @@ Thumbs.db
 *.swp
 *.swo
 *~
+
+# Frontend (Vite + React)
+frontend/node_modules/
+frontend/.next/
+frontend/data/
+frontend/next-env.d.ts
+frontend/dist/
+
+# opencode internal
+.opencode/
+
+# Graphify generated output
+graphify-out/
+
+# Build artifacts
+*.tsbuildinfo
