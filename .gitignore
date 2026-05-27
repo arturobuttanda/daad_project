@@ -49,16 +49,10 @@ Thumbs.db
 *~
 
 # Frontend (Vite + React)
-frontend/node_modules/
-Frontend/node_modules/
-frontend/.next/
-Frontend/.next/
-frontend/data/
-Frontend/data/
-frontend/next-env.d.ts
-Frontend/next-env.d.ts
-frontend/dist/
-Frontend/dist/
+# Frontend (Vite + React)
+**/node_modules/
+**/.next/
+**/dist/
 
 # opencode internal
 .opencode/
