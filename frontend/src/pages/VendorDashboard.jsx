@@ -226,7 +226,7 @@ export default function VendorDashboard() {
       title="Gestión de productos"
       subtitle="Crea, edita, consulta y elimina productos desde Oracle. El primer acceso del vendedor se centra en este módulo."
     >
-      <section className="glass-panel p-6">
+      <section id="add-product" className="glass-panel p-6">
         <div className="flex flex-wrap items-start justify-between gap-4">
           <div>
             <p className="tag">CRUD de productos</p>

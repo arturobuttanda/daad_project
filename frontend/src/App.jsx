@@ -1,3 +1,4 @@
+import { useEffect, useState } from "react";
 import { BrowserRouter, Navigate, Route, Routes } from "react-router-dom";
 import Home from "./pages/Home.jsx";
 import Login from "./pages/Login.jsx";
@@ -9,10 +10,33 @@ import ClientProductDetail from "./pages/ClientProductDetail.jsx";
 import ClientHistory from "./pages/ClientHistory.jsx";
 import NotFound from "./pages/NotFound.jsx";
 import { Toaster } from "react-hot-toast";
+import { AUTH_CHANGE_EVENT } from "./utils/authEvents.js";
+
+function readAuthSnapshot() {
+  return {
+    isRegistered: localStorage.getItem("isRegistered") === "true",
+    userType: localStorage.getItem("userType"),
+  };
+}
 
 export default function App() {
-  const isRegistered = localStorage.getItem("isRegistered") === "true";
-  const userType = localStorage.getItem("userType");
+  const [authState, setAuthState] = useState(readAuthSnapshot);
+
+  useEffect(() => {
+    const syncAuthState = () => {
+      setAuthState(readAuthSnapshot());
+    };
+
+    window.addEventListener("storage", syncAuthState);
+    window.addEventListener(AUTH_CHANGE_EVENT, syncAuthState);
+
+    return () => {
+      window.removeEventListener("storage", syncAuthState);
+      window.removeEventListener(AUTH_CHANGE_EVENT, syncAuthState);
+    };
+  }, []);
+
+  const { isRegistered, userType } = authState;
   const RequireVendor = ({ children }) =>
     isRegistered && userType === "Vendedor" ? (
       children

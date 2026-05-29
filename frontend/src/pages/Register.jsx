@@ -2,6 +2,7 @@ import { useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import toast from "react-hot-toast";
 import AuthNavbar from "../components/AuthNavbar.jsx";
+import { notifyAuthChange } from "../utils/authEvents.js";
 
 const API_URL = import.meta.env.VITE_API_URL || "http://localhost:8000";
 const FIELD_LIMIT = 60;
@@ -10,11 +11,12 @@ const PHONE_LIMIT = 10;
 export default function Register() {
   const navigate = useNavigate();
   const [showPassword, setShowPassword] = useState(false);
+  const [selectedPortal, setSelectedPortal] = useState("Cliente");
   const [formValues, setFormValues] = useState({
     nombre: "",
     telefono: "",
     correo: "",
-    tipoUsuario: "Vendedor",
+    tipoUsuario: "Cliente",
     contrasena: "",
     confirmar: "",
   });
@@ -81,6 +83,7 @@ export default function Register() {
       localStorage.setItem("userType", data.tipo_usuario);
       localStorage.setItem("userName", data.nombre);
       localStorage.setItem("userId", data.id);
+      notifyAuthChange();
       toast.success(`Registro completado. Bienvenido, ${data.nombre}.`);
       if (data.tipo_usuario === "Vendedor") {
         navigate("/vendedor");
@@ -95,13 +98,75 @@ export default function Register() {
   };
 
   return (
-    <div className="page-wrap min-h-screen py-10">
-      <div className="mb-8">
-        <AuthNavbar title="Registro de usuario" />
+    <div className="page-wrap min-h-screen py-8 sm:py-10">
+      <div className="mx-auto mb-8 max-w-4xl">
+        <AuthNavbar title="Join our premium commerce ecosystem" />
       </div>
-      <div className="relative w-full">
-        <section className="glass-panel h-fit p-8">
+
+      <div className="mx-auto flex max-w-4xl justify-center">
+        <section className="glass-panel relative w-full max-w-xl overflow-hidden rounded-2xl border border-[#C9D2E7] p-6 sm:p-7 md:p-8">
+
+          <div className="relative z-10">
+            <div className="flex flex-col items-center text-center">
+              <h1 className="font-display text-3xl font-semibold text-ocean sm:text-4xl">
+                NexusMarket
+              </h1>
+              <p className="mt-2 max-w-md text-sm text-slate-600 sm:text-base">
+                Crea tu cuenta de cliente o vendedor.
+              </p>
+            </div>
+
+            <div className="mt-6 rounded-xl border border-[#CFD8EA] bg-[#F8FAFF] p-1">
+              <div className="grid grid-cols-2 gap-1 text-sm font-semibold text-slate-600">
+                <Link
+                  to="/login"
+                  className="rounded-lg border border-transparent px-4 py-2.5 text-center transition hover:border-[#C7D2FE] hover:bg-white hover:text-ocean"
+                >
+                  Login
+                </Link>
+                <div className="rounded-lg border border-[#C7D2FE] bg-white px-4 py-2.5 text-center text-ocean">
+                  Sign Up
+                </div>
+              </div>
+            </div>
+
           <form className="mt-6 grid gap-4" onSubmit={handleSubmit}>
+            <div>
+              <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">
+                Elige tu tipo de cuenta
+              </p>
+              <div className="mt-3 grid grid-cols-2 gap-3">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setSelectedPortal("Cliente");
+                    setFormValues((current) => ({ ...current, tipoUsuario: "Cliente" }));
+                  }}
+                  className={
+                    selectedPortal === "Cliente"
+                      ? "flex items-center justify-center gap-2 rounded-xl border border-ocean bg-[#EFF4FF] px-4 py-3 text-sm font-semibold text-ocean transition"
+                      : "flex items-center justify-center gap-2 rounded-xl border border-[#CFD8EA] bg-[#F2F6FF] px-4 py-3 text-sm font-semibold text-slate-600 transition hover:border-[#9FB3E8] hover:bg-white"
+                  }
+                >
+                  Cliente
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setSelectedPortal("Vendedor");
+                    setFormValues((current) => ({ ...current, tipoUsuario: "Vendedor" }));
+                  }}
+                  className={
+                    selectedPortal === "Vendedor"
+                      ? "flex items-center justify-center gap-2 rounded-xl border border-ocean bg-[#EFF4FF] px-4 py-3 text-sm font-semibold text-ocean transition"
+                      : "flex items-center justify-center gap-2 rounded-xl border border-[#CFD8EA] bg-[#F2F6FF] px-4 py-3 text-sm font-semibold text-slate-600 transition hover:border-[#9FB3E8] hover:bg-white"
+                  }
+                >
+                  Vendedor
+                </button>
+              </div>
+            </div>
+
             <div className="grid gap-4 sm:grid-cols-2">
               <div>
                 <label className="text-xs font-semibold uppercase tracking-wide text-slate-600">
@@ -153,15 +218,12 @@ export default function Register() {
                 <label className="text-xs font-semibold uppercase tracking-wide text-slate-600">
                   Tipo de usuario
                 </label>
-                <select
+                <input
+                  type="text"
                   className="input-field mt-2"
-                  name="tipoUsuario"
                   value={formValues.tipoUsuario}
-                  onChange={handleChange}
-                >
-                  <option>Vendedor</option>
-                  <option>Cliente</option>
-                </select>
+                  readOnly
+                />
               </div>
             </div>
             <div className="grid gap-4 sm:grid-cols-2">
@@ -297,7 +359,7 @@ export default function Register() {
             </div>
             <button
               type="submit"
-              className="primary-button w-full disabled:cursor-not-allowed disabled:opacity-60"
+              className="secondary-button w-full disabled:cursor-not-allowed disabled:opacity-60"
               disabled={!isFormValid || isSubmitting}
             >
               {isSubmitting ? "Creando cuenta..." : "Crear cuenta"}
@@ -308,6 +370,7 @@ export default function Register() {
             <Link to="/login" className="font-semibold text-ocean">
               Inicia sesion
             </Link>
+          </div>
           </div>
         </section>
       </div>

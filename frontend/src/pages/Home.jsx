@@ -1,5 +1,6 @@
 import { Link } from "react-router-dom";
 import UserNavbar from "../components/UserNavbar.jsx";
+import { notifyAuthChange } from "../utils/authEvents.js";
 
 const sidebarItems = [
   {
@@ -52,6 +53,7 @@ export default function Home() {
     localStorage.removeItem("userType");
     localStorage.removeItem("userName");
     localStorage.removeItem("userId");
+    notifyAuthChange();
   };
 
   return (

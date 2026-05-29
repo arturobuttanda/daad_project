@@ -5,14 +5,14 @@
 @tailwind utilities;
 
 :root {
-  --color-ink: #0b1b2b;
-  --color-sand: #f6f1e7;
-  --color-brass: #f7c948;
-  --color-copper: #f26b5b;
-  --color-ocean: #1a7f8f;
-  --color-mint: #9be3c5;
-  --color-cloud: #fffaf2;
-  --color-shadow: rgba(11, 27, 43, 0.16);
+  --color-ink: #111827;
+  --color-sand: #d5d9e8;
+  --color-brass: #1d4ed8;
+  --color-copper: #dc2626;
+  --color-ocean: #12329b;
+  --color-mint: #22c55e;
+  --color-cloud: #f9f9ff;
+  --color-shadow: rgba(26, 39, 78, 0.18);
 }
 
 * {
@@ -29,11 +29,10 @@ body,
 body {
   font-family: "IBM Plex Sans", system-ui, sans-serif;
   color: var(--color-ink);
-  background:
-    radial-gradient(circle at 12% 18%, rgba(155, 227, 197, 0.35), transparent 45%),
-    radial-gradient(circle at 88% 12%, rgba(242, 107, 91, 0.25), transparent 40%),
-    radial-gradient(circle at 72% 85%, rgba(247, 201, 72, 0.3), transparent 50%),
-    linear-gradient(155deg, #fff6ea 0%, #f6efe3 55%, #f2e7d9 100%);
+  background-color: #f9f9ff;
+  background-image:
+    radial-gradient(circle at 10% 10%, rgba(37, 99, 235, 0.06), transparent 40%),
+    radial-gradient(circle at 90% 15%, rgba(59, 130, 246, 0.05), transparent 35%);
   min-height: 100vh;
   overflow-x: hidden;
 }
@@ -50,23 +49,23 @@ a {
 
 @layer components {
   .glass-panel {
-    @apply rounded-3xl border border-white/60 bg-white/70 shadow-soft backdrop-blur;
+    @apply rounded-3xl border border-[#D7DDED] bg-white shadow-soft;
   }
 
   .input-field {
-    @apply w-full rounded-2xl border border-sand bg-white/80 px-4 py-3 text-sm text-ink shadow-soft outline-none transition focus:border-ocean focus:ring-2 focus:ring-[rgba(31,78,95,0.2)];
+    @apply w-full rounded-xl border border-[#CBD5E1] bg-white px-4 py-3 text-sm text-ink outline-none transition focus:border-ocean focus:ring-2 focus:ring-[rgba(18,50,155,0.18)];
   }
 
   .primary-button {
-    @apply inline-flex items-center justify-center rounded-2xl bg-ocean px-5 py-3 text-sm font-semibold text-white shadow-glow transition hover:-translate-y-0.5 hover:shadow-lg;
+    @apply inline-flex items-center justify-center rounded-xl bg-ocean px-5 py-3 text-sm font-semibold text-white shadow-glow transition hover:brightness-110;
   }
 
   .secondary-button {
-    @apply inline-flex items-center justify-center rounded-2xl border border-ocean bg-white/80 px-4 py-2 text-sm font-semibold text-ocean transition hover:bg-white;
+    @apply inline-flex items-center justify-center rounded-xl border border-[#C7D2FE] bg-white px-4 py-2 text-sm font-semibold text-ocean transition hover:bg-[#EEF2FF];
   }
 
   .tag {
-    @apply inline-flex items-center rounded-full bg-[rgba(247,201,72,0.3)] px-3 py-1 text-xs font-semibold uppercase tracking-wide text-ink;
+    @apply inline-flex items-center rounded-full bg-[#EEF2FF] px-3 py-1 text-xs font-semibold uppercase tracking-wide text-ocean;
   }
 }
 
@@ -116,7 +115,7 @@ a {
   height: 190px;
   right: -40px;
   top: -60px;
-  background: radial-gradient(circle, rgba(247, 201, 72, 0.9), rgba(247, 201, 72, 0.2));
+  background: radial-gradient(circle, rgba(37, 99, 235, 0.45), rgba(37, 99, 235, 0.1));
   animation: float-slow 9s ease-in-out infinite;
 }
 
@@ -125,7 +124,7 @@ a {
   height: 150px;
   left: -30px;
   bottom: -40px;
-  background: radial-gradient(circle, rgba(242, 107, 91, 0.8), rgba(242, 107, 91, 0.15));
+  background: radial-gradient(circle, rgba(59, 130, 246, 0.45), rgba(59, 130, 246, 0.1));
   animation: float-fast 7s ease-in-out infinite;
 }
 
@@ -134,7 +133,7 @@ a {
   height: 120px;
   right: 25%;
   top: 45%;
-  background: radial-gradient(circle, rgba(26, 127, 143, 0.75), rgba(26, 127, 143, 0.15));
+  background: radial-gradient(circle, rgba(29, 78, 216, 0.45), rgba(29, 78, 216, 0.1));
   animation: float-slow 8s ease-in-out infinite;
 }
 

@@ -36,6 +36,15 @@ WALLET_PATH = os.environ.get("WALLET_PATH") or os.environ.get("WALLET_LOCATION")
 WALLET_PASSWORD = os.environ.get("WALLET_PASSWORD", "")
 FRONTEND_URL = os.environ.get("FRONTEND_URL", "http://localhost:5173")
 
+
+def build_allowed_origins(frontend_url: str) -> list[str]:
+  allowed_origins = {frontend_url.strip()}
+  if frontend_url.startswith("http://localhost:"):
+    allowed_origins.add(frontend_url.replace("http://localhost:", "http://127.0.0.1:", 1))
+  elif frontend_url.startswith("http://127.0.0.1:"):
+    allowed_origins.add(frontend_url.replace("http://127.0.0.1:", "http://localhost:", 1))
+  return sorted(origin for origin in allowed_origins if origin)
+
 if not WALLET_PATH:
   _wallet_root = ROOT_DIR / "wallet"
   if _wallet_root.is_dir():
@@ -56,7 +65,7 @@ pwd_context = CryptContext(schemes=["pbkdf2_sha256"], deprecated="auto")
 app = FastAPI(title="DAAD Auth API")
 app.add_middleware(
   CORSMiddleware,
-  allow_origins=[FRONTEND_URL],
+  allow_origins=build_allowed_origins(FRONTEND_URL),
   allow_credentials=True,
   allow_methods=["*"],
   allow_headers=["*"],
@@ -74,6 +83,7 @@ class RegisterRequest(BaseModel):
 class LoginRequest(BaseModel):
   correo: str
   contrasena: str
+  tipo_usuario: str | None = None
 
 
 class ProductCreateRequest(BaseModel):
@@ -183,6 +193,18 @@ def validate_password(password: str) -> bool:
 
 def normalize_email(email: str) -> str:
   return email.strip().lower()
+
+
+def normalize_user_role(role: str) -> str:
+  normalized_role = role.strip().lower()
+  if normalized_role in {"vendedor", "seller", "merchant"}:
+    return "Vendedor"
+  if normalized_role in {"cliente", "customer", "client"}:
+    return "Cliente"
+  raise HTTPException(
+    status_code=status.HTTP_400_BAD_REQUEST,
+    detail="Tipo de usuario no valido.",
+  )
 
 
 def normalize_product_id(product_id: str) -> str:
@@ -673,6 +695,7 @@ def healthcheck():
 @app.post("/api/auth/register")
 def register_user(payload: RegisterRequest):
   email = normalize_email(payload.correo)
+  tipo_usuario = normalize_user_role(payload.tipo_usuario)
   if not validate_email(email):
     raise HTTPException(
       status_code=status.HTTP_400_BAD_REQUEST,
@@ -683,16 +706,10 @@ def register_user(payload: RegisterRequest):
       status_code=status.HTTP_400_BAD_REQUEST,
       detail="La contrasena no cumple los criterios.",
     )
-  if payload.tipo_usuario not in {"Vendedor", "Cliente"}:
-    raise HTTPException(
-      status_code=status.HTTP_400_BAD_REQUEST,
-      detail="Tipo de usuario no valido.",
-    )
-
   user_id = str(uuid.uuid4())
   password_hash = pwd_context.hash(payload.contrasena)
 
-  query_exists = "SELECT id_usuario FROM usuarios WHERE correo = :correo"
+  query_exists = "SELECT id_usuario FROM usuarios WHERE correo = :correo AND tipo_usuario = :tipo_usuario"
   query_insert = (
     "INSERT INTO usuarios (id_usuario, nombre, telefono, correo, tipo_usuario, password_hash) "
     "VALUES (:id_usuario, :nombre, :telefono, :correo, :tipo_usuario, :password_hash)"
@@ -701,11 +718,11 @@ def register_user(payload: RegisterRequest):
   try:
     with get_connection() as connection:
       with connection.cursor() as cursor:
-        cursor.execute(query_exists, {"correo": email})
+        cursor.execute(query_exists, {"correo": email, "tipo_usuario": tipo_usuario})
         if cursor.fetchone():
           raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
-            detail="El correo ya esta registrado.",
+            detail="El correo ya esta registrado para ese rol.",
           )
         cursor.execute(
           query_insert,
@@ -714,7 +731,7 @@ def register_user(payload: RegisterRequest):
             "nombre": payload.nombre.strip(),
             "telefono": payload.telefono.strip(),
             "correo": email,
-            "tipo_usuario": payload.tipo_usuario,
+            "tipo_usuario": tipo_usuario,
             "password_hash": password_hash,
           },
         )
@@ -732,30 +749,61 @@ def register_user(payload: RegisterRequest):
     "id": user_id,
     "nombre": payload.nombre.strip(),
     "correo": email,
-    "tipo_usuario": payload.tipo_usuario,
+    "tipo_usuario": tipo_usuario,
   }
 
 
 @app.post("/api/auth/login")
 def login_user(payload: LoginRequest):
   email = normalize_email(payload.correo)
+  tipo_usuario = normalize_user_role(payload.tipo_usuario) if payload.tipo_usuario else None
   if not validate_email(email):
     raise HTTPException(
       status_code=status.HTTP_400_BAD_REQUEST,
       detail="Correo no valido.",
     )
 
+  query_roles_by_email = "SELECT tipo_usuario FROM usuarios WHERE correo = :correo"
   query_user = (
     "SELECT id_usuario, nombre, correo, tipo_usuario, password_hash "
-    "FROM usuarios WHERE correo = :correo"
+    "FROM usuarios WHERE correo = :correo AND tipo_usuario = :tipo_usuario"
   )
 
   try:
     with get_connection() as connection:
       with connection.cursor() as cursor:
-        cursor.execute(query_user, {"correo": email})
+        cursor.execute(query_roles_by_email, {"correo": email})
+        available_roles = [row[0] for row in cursor.fetchall()]
+        if not available_roles:
+          raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Credenciales incorrectas.",
+          )
+
+        if not tipo_usuario:
+          if len(available_roles) > 1:
+            raise HTTPException(
+              status_code=status.HTTP_409_CONFLICT,
+              detail="Este correo existe en multiples roles. Selecciona tu tipo de cuenta.",
+            )
+          tipo_usuario = available_roles[0]
+        elif tipo_usuario not in available_roles:
+          available_label = ", ".join(sorted(available_roles))
+          if len(available_roles) == 1:
+            raise HTTPException(
+              status_code=status.HTTP_409_CONFLICT,
+              detail=f"Tu cuenta esta registrada, pero como {available_roles[0].lower()}.",
+            )
+          raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=f"Tu cuenta esta registrada como {available_label.lower()}. Selecciona el rol correcto.",
+          )
+
+        cursor.execute(query_user, {"correo": email, "tipo_usuario": tipo_usuario})
         row = cursor.fetchone()
   except Exception as exc:
+    if isinstance(exc, HTTPException):
+      raise
     logger.exception("Error al validar usuario: %s", exc)
     raise HTTPException(
       status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,

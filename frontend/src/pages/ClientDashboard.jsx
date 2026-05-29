@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { Link } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import toast from "react-hot-toast";
 import ClientShell from "../components/ClientShell.jsx";
 import { addClientCartItem, clearClientCart, getClientCart, updateClientCartItem } from "../utils/clientCart.js";
@@ -16,6 +16,7 @@ function formatMoney(value) {
 }
 
 export default function ClientDashboard() {
+  const navigate = useNavigate();
   const userId = localStorage.getItem("userId");
   const [products, setProducts] = useState([]);
   const [isLoading, setIsLoading] = useState(false);
@@ -27,6 +28,9 @@ export default function ClientDashboard() {
   const [recentPurchases, setRecentPurchases] = useState([]);
   const [ticket, setTicket] = useState(null);
   const [isCheckingOut, setIsCheckingOut] = useState(false);
+  const [categoryFilter, setCategoryFilter] = useState("all");
+  const [minPriceFilter, setMinPriceFilter] = useState(0);
+  const [maxPriceFilter, setMaxPriceFilter] = useState(0);
 
   const loadProducts = async (nextPage = page, nextSearch = search) => {
     setIsLoading(true);
@@ -94,6 +98,56 @@ export default function ClientDashboard() {
     return { items, total };
   }, [cartItems]);
 
+  const maxCatalogPrice = useMemo(() => {
+    if (!products.length) {
+      return 0;
+    }
+    return Math.max(...products.map((product) => Number(product.precio_actual || 0)));
+  }, [products]);
+
+  useEffect(() => {
+    setMinPriceFilter(0);
+    setMaxPriceFilter(maxCatalogPrice);
+  }, [maxCatalogPrice]);
+
+  const categoryOptions = useMemo(() => {
+    const categories = new Set();
+    for (const product of products) {
+      const categoryName = String(product.categoria || "").trim();
+      if (categoryName) {
+        categories.add(categoryName);
+      }
+    }
+    return ["all", ...Array.from(categories).sort((a, b) => a.localeCompare(b))];
+  }, [products]);
+
+  const sliderMax = Math.max(1, Math.ceil(maxCatalogPrice));
+  const selectedMin = Math.min(minPriceFilter, maxPriceFilter);
+  const selectedMax = Math.max(minPriceFilter, maxPriceFilter);
+  const rangeStart = (selectedMin / sliderMax) * 100;
+  const rangeEnd = (selectedMax / sliderMax) * 100;
+
+  const filteredProducts = useMemo(() => {
+    return products.filter((product) => {
+      const price = Number(product.precio_actual || 0);
+      const categoryName = String(product.categoria || "").trim();
+      const matchesCategory = categoryFilter === "all" || categoryName === categoryFilter;
+      const matchesPrice = price >= selectedMin && price <= selectedMax;
+      return matchesCategory && matchesPrice;
+    });
+  }, [products, categoryFilter, selectedMin, selectedMax]);
+
+  const truncateName = (value, maxLength = 28) => {
+    const cleanValue = String(value || "").trim();
+    if (!cleanValue) {
+      return "Producto";
+    }
+    if (cleanValue.length <= maxLength) {
+      return cleanValue;
+    }
+    return `${cleanValue.slice(0, maxLength - 3)}...`;
+  };
+
   const handleAddToCart = (product) => {
     const nextCart = addClientCartItem(userId, product, 1);
     setCartItems(nextCart);
@@ -146,7 +200,7 @@ export default function ClientDashboard() {
       title="Catálogo disponible"
       subtitle="Explora los productos, revisa stock y agrega artículos al carrito. Desde aquí también puedes consultar tu historial de compras."
     >
-      <section className="grid gap-6 xl:grid-cols-[minmax(0,1.3fr)_minmax(320px,0.7fr)]">
+      <section className="grid gap-6 xl:grid-cols-[minmax(0,1.45fr)_minmax(320px,0.55fr)]">
         <div className="space-y-6">
           <div className="glass-panel p-6">
             <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
@@ -174,51 +228,136 @@ export default function ClientDashboard() {
             </div>
           </div>
 
-          <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
-            {products.map((product) => (
-              <article key={product.id_producto} className="glass-panel lift-card p-5">
-                <div className="flex items-start justify-between gap-3">
-                  <div className="min-w-0">
-                    <h4 className="break-words font-display text-lg font-semibold text-ink">
-                      {product.nombre}
-                    </h4>
-                    <p className="mt-1 text-xs uppercase tracking-wide text-slate-500">
-                      {product.marca || "Marca no indicada"}
+          <div className="grid gap-5 xl:grid-cols-[260px_minmax(0,1fr)]">
+            <aside className="glass-panel h-fit p-5">
+              <h4 className="font-display text-lg font-semibold text-ink">Filtros</h4>
+              <div className="mt-4 space-y-5">
+                <div>
+                  <label className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+                    Filtrar por categoría
+                  </label>
+                  <select
+                    className="input-field mt-2"
+                    value={categoryFilter}
+                    onChange={(event) => setCategoryFilter(event.target.value)}
+                  >
+                    {categoryOptions.map((category) => (
+                      <option key={category} value={category}>
+                        {category === "all" ? "Todas" : category}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                <div>
+                  <label className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+                    Rango de precio
+                  </label>
+                  <div className="mt-3 rounded-2xl border border-[#D6DEEE] bg-[#F8FAFF] p-4">
+                    <div className="mt-2 flex items-center justify-between text-lg font-semibold text-ink">
+                      <span>{Math.round(selectedMin)}</span>
+                      <span>{Math.round(selectedMax)}</span>
+                    </div>
+
+                    <div className="relative mt-4 h-7">
+                      <div className="absolute left-0 right-0 top-1/2 h-3 -translate-y-1/2 rounded-full border border-[#B8C3DA] bg-[#E5EAF7]" />
+                      <div
+                        className="absolute top-1/2 h-3 -translate-y-1/2 rounded-full bg-[linear-gradient(90deg,#7BC9FF_0%,#3C9BE8_55%,#1E4BB8_100%)]"
+                        style={{
+                          left: `${rangeStart}%`,
+                          width: `${Math.max(0, rangeEnd - rangeStart)}%`,
+                        }}
+                      />
+
+                      <input
+                        type="range"
+                        min="0"
+                        max={sliderMax}
+                        step="1"
+                        value={selectedMin}
+                        onChange={(event) => {
+                          const nextMin = Number(event.target.value);
+                          setMinPriceFilter(Math.min(nextMin, selectedMax));
+                        }}
+                        className="absolute left -1 top-1/4 z-40 w-full -translate-y-1/4 appearance-none bg-transparent [&::-webkit-slider-runnable-track]:h-0 [&::-webkit-slider-thumb]:h-4 [&::-webkit-slider-thumb]:w-4 [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:border [&::-webkit-slider-thumb]:border-[#B5BDCF] [&::-webkit-slider-thumb]:bg-[#ECEFF7] [&::-webkit-slider-thumb]:shadow-[0_2px_0_#9AA3B7]"
+                      />
+
+                      <input
+                        type="range"
+                        min="0"
+                        max={sliderMax}
+                        step="1"
+                        value={selectedMax}
+                        onChange={(event) => {
+                          const nextMax = Number(event.target.value);
+                          setMaxPriceFilter(Math.max(nextMax, selectedMin));
+                        }}
+                        className="absolute left-1 top-1/4 z-40 w-full -translate-y-1/4 appearance-none bg-transparent [&::-webkit-slider-runnable-track]:h-0 [&::-webkit-slider-thumb]:h-4 [&::-webkit-slider-thumb]:w-4 [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:border [&::-webkit-slider-thumb]:border-[#B5BDCF] [&::-webkit-slider-thumb]:bg-[#ECEFF7] [&::-webkit-slider-thumb]:shadow-[0_2px_0_#9AA3B7]"
+                      />
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </aside>
+
+            <div className="grid gap-4 md:grid-cols-2">
+              {filteredProducts.map((product) => (
+                <article
+                  key={product.id_producto}
+                  role="button"
+                  tabIndex={0}
+                  onClick={() => navigate(`/cliente/producto/${product.id_producto}`)}
+                  onKeyDown={(event) => {
+                    if (event.key === "Enter" || event.key === " ") {
+                      event.preventDefault();
+                      navigate(`/cliente/producto/${product.id_producto}`);
+                    }
+                  }}
+                  className="glass-panel group relative cursor-pointer overflow-hidden p-5 transition duration-150 hover:-translate-y-1 hover:shadow-lg"
+                >
+                  <div className="flex items-start justify-between gap-3">
+                    <span className="rounded-full bg-[#EEF2FF] px-3 py-1 text-xs font-semibold text-ocean">
+                      {product.categoria || "Sin categoria"}
+                    </span>
+                    <span className="rounded-full bg-[rgba(26,127,143,0.12)] px-3 py-1 text-xs font-semibold text-ocean">
+                      Stock {product.stock ?? 0}
+                    </span>
+                  </div>
+
+                  <h4 className="mt-3 h-7 overflow-hidden text-ellipsis whitespace-nowrap font-display text-lg font-semibold text-ink">
+                    {truncateName(product.nombre)}
+                  </h4>
+
+                  <p className="mt-1 text-xs uppercase tracking-wide text-slate-500">
+                    {product.marca || "Marca no indicada"}
+                  </p>
+
+                  <div className="mt-4">
+                    <p className="font-display text-3xl font-semibold text-ocean">
+                      {formatMoney(product.precio_actual)}
                     </p>
                   </div>
-                  <span className="rounded-full bg-[rgba(26,127,143,0.12)] px-3 py-1 text-xs font-semibold text-ocean">
-                    Stock {product.stock ?? 0}
-                  </span>
-                </div>
-                <p className="mt-3 text-sm text-slate-600">
-                  {product.categoria || "Sin categoria"}
-                </p>
-                <div className="mt-4 space-y-2 text-sm text-slate-600">
-                  <p>Precio actual: <span className="font-semibold text-ink">{formatMoney(product.precio_actual)}</span></p>
-                  <p>Vendedor: <span className="font-semibold text-ink">{product.vendedor_nombre || "Asignación pendiente"}</span></p>
-                </div>
-                <div className="mt-4 flex flex-wrap gap-2">
-                  <Link
-                    to={`/cliente/producto/${product.id_producto}`}
-                    className="primary-button"
-                  >
-                    Ver producto
-                  </Link>
-                  <button
-                    type="button"
-                    className="secondary-button"
-                    onClick={() => handleAddToCart(product)}
-                  >
-                    Añadir al carrito
-                  </button>
+
+                  <div className="pointer-events-none absolute inset-x-4 bottom-4 translate-y-3 opacity-0 transition-all duration-150 group-hover:translate-y-0 group-hover:opacity-100">
+                    <button
+                      type="button"
+                      className="primary-button pointer-events-auto w-full"
+                      onClick={(event) => {
+                        event.stopPropagation();
+                        handleAddToCart(product);
+                      }}
+                    >
+                      Añadir al carrito
+                    </button>
                 </div>
               </article>
             ))}
+            </div>
           </div>
 
           <div className="flex flex-col gap-3 border-t border-sand pt-4 sm:flex-row sm:items-center sm:justify-between">
             <p className="text-sm text-slate-600">
-              Página {page} de {totalPages} · {PAGE_SIZE} productos por vista
+              Página {page} de {totalPages} · {filteredProducts.length} productos visibles
             </p>
             <div className="flex gap-2">
               <button

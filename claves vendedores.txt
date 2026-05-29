@@ -1,0 +1,22 @@
+Claves de vendedores demo
+
+Todos los vendedores demo usan la contraseña:
+Demo1234
+
+Correos de vendedores:
+vendedor_demo_01@demo.local
+vendedor_demo_02@demo.local
+vendedor_demo_03@demo.local
+vendedor_demo_04@demo.local
+vendedor_demo_05@demo.local
+vendedor_demo_06@demo.local
+vendedor_demo_07@demo.local
+vendedor_demo_08@demo.local
+vendedor_demo_09@demo.local
+vendedor_demo_10@demo.local
+vendedor_demo_11@demo.local
+vendedor_demo_12@demo.local
+vendedor_demo_13@demo.local
+vendedor_demo_14@demo.local
+vendedor_demo_15@demo.local
+vendedor_demo_16@demo.local
