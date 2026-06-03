@@ -1,5 +1,7 @@
+import DashboardChartPanel from "../components/DashboardChartPanel.jsx";
 import VendorShell from "../components/VendorShell.jsx";
 import { Link } from "react-router-dom";
+import { addNotification } from "../utils/notificationEvents.js";
 
 const metrics = [
   { label: "Ingresos totales", value: 128450, delta: "+8.4%" },
@@ -21,6 +23,62 @@ const sales = [
 
 const trend = [42, 65, 55, 80, 48, 72, 60];
 
+const chartOptions = [
+  {
+    key: "sales-line",
+    label: "Grafico de lineas de ventas",
+    kind: "line",
+    description: "Muestra la evolucion semanal del volumen de ventas. Es ideal para detectar si el periodo viene creciendo o cayendo.",
+    labels: ["Lun", "Mar", "Mie", "Jue", "Vie", "Sab", "Dom"],
+    values: trend,
+    unitLabel: "%",
+    insights: [
+      "Sirve para leer comportamiento por dia.",
+      "Ayuda a detectar picos y caidas en la semana.",
+    ],
+  },
+  {
+    key: "revenue-bars",
+    label: "Grafico de barras por producto",
+    kind: "bar",
+    description: "Compara las ventas de los productos destacados para ver cuales generan mas ingreso.",
+    labels: sales.map((sale) => sale.name),
+    values: sales.map((sale) => sale.total),
+    unitLabel: "MXN",
+    insights: [
+      "Es util para decidir promociones por articulo.",
+      "Permite identificar tu top de ventas sin leer tablas.",
+    ],
+  },
+  {
+    key: "stock-histogram",
+    label: "Histograma de stock bajo",
+    kind: "histogram",
+    description: "Agrupa las alertas por nivel de stock para mostrar cuantos productos estan en zona de riesgo.",
+    labels: ["1-3", "4-6", "7-9", "10+"],
+    values: [1, 1, 1, 0],
+    insights: [
+      "Resulta util para reposicion y planeacion de compras.",
+      "Ayuda a enfocar primero los productos con urgencia.",
+    ],
+  },
+  {
+    key: "cost-share",
+    label: "Grafico de dona de ingresos y costos",
+    kind: "donut",
+    description: "Resume el peso relativo de ingresos, costos y margen para entender la salud financiera de un vistazo.",
+    slices: [
+      { label: "Ingresos", value: metrics[0].value, color: "#1E4BB8" },
+      { label: "Costos", value: metrics[1].value, color: "#F26B5B" },
+      { label: "Margen", value: 39030, color: "#5CC49D" },
+    ],
+    insights: [
+      "Convierte cifras grandes en proporcion visual.",
+      "Es buena para mostrar mezcla de ingresos vs egresos.",
+    ],
+  },
+];
+
 const money = new Intl.NumberFormat("es-MX", {
   style: "currency",
   currency: "MXN",
@@ -38,6 +96,13 @@ export default function FinancialReport() {
           Volver a productos
         </Link>
       </div>
+
+      <DashboardChartPanel
+        title="Selector de graficos financieros"
+        description="Cambia entre lineas, barras, histogramas y dona para leer el mismo negocio desde distintas perspectivas."
+        options={chartOptions}
+        defaultKey="sales-line"
+      />
 
       <section className="grid gap-4 lg:grid-cols-[1.2fr_0.8fr]">
         <div className="glass-panel p-6">
@@ -139,6 +204,12 @@ export default function FinancialReport() {
               onClick={() => {
                 const apiBase = import.meta.env.VITE_API_URL || "http://localhost:8000";
                 const url = `${apiBase}/api/reportes/ventas/csv?period=30d`;
+                addNotification({
+                  kind: "csv-download",
+                  title: "Reporte CSV descargado",
+                  detail: "Se inicio la descarga del reporte de ventas de los ultimos 30 dias.",
+                  source: "Finanzas",
+                });
                 window.location.href = url;
               }}
             >

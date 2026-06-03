@@ -3,6 +3,7 @@ import { Link, useNavigate, useParams } from "react-router-dom";
 import toast from "react-hot-toast";
 import ClientShell from "../components/ClientShell.jsx";
 import { addClientCartItem } from "../utils/clientCart.js";
+import { addNotification } from "../utils/notificationEvents.js";
 
 const API_URL = import.meta.env.VITE_API_URL || "http://localhost:8000";
 
@@ -49,6 +50,7 @@ export default function ClientProductDetail() {
   const product = detail?.product;
   const recommendation = detail?.recommendation;
   const priceHistory = detail?.price_history || [];
+  const similarProducts = recommendation?.similar_products || [];
 
   const historyMessage = useMemo(() => recommendation?.signal || "", [recommendation]);
 
@@ -58,6 +60,12 @@ export default function ClientProductDetail() {
     }
     addClientCartItem(userId, product, quantity);
     toast.success("Producto agregado al carrito.");
+    addNotification({
+      kind: "cart",
+      title: "Producto agregado al carrito",
+      detail: `${product.nombre} se guardó en el carrito.`,
+      source: "Detalle de producto",
+    });
   };
 
   const handlePurchase = async () => {
@@ -87,6 +95,12 @@ export default function ClientProductDetail() {
       }
       setTicket(data);
       toast.success("Compra registrada correctamente.");
+      addNotification({
+        kind: "purchase",
+        title: "Compra completada",
+        detail: `La compra de ${product.nombre} se procesó correctamente.`,
+        source: "Detalle de producto",
+      });
     } catch (error) {
       toast.error(error.message || "No se pudo completar la compra.");
     } finally {
@@ -188,8 +202,40 @@ export default function ClientProductDetail() {
                         <p className="text-xs uppercase tracking-wide text-slate-500">Competencia</p>
                         <p className="mt-2 text-sm font-semibold text-ink">{formatMoney(recommendation?.competition_average)}</p>
                       </div>
+                      <div className="rounded-2xl border border-sand bg-white p-4">
+                        <p className="text-xs uppercase tracking-wide text-slate-500">Mercado similar</p>
+                        <p className="mt-2 text-sm font-semibold text-ink">{formatMoney(recommendation?.market_reference_price)}</p>
+                      </div>
+                      <div className="rounded-2xl border border-sand bg-white p-4">
+                        <p className="text-xs uppercase tracking-wide text-slate-500">Comprar ahora</p>
+                        <p className="mt-2 text-sm font-semibold text-ink">
+                          {recommendation?.buy_now ? "Sí, conviene" : "No, mejor esperar"}
+                        </p>
+                      </div>
                     </div>
                     <p className="mt-4 text-sm text-slate-600">{recommendation?.reason}</p>
+                    <p className="mt-2 text-sm text-slate-600">{recommendation?.buy_reason}</p>
+                    {similarProducts.length > 0 ? (
+                      <div className="mt-5 rounded-3xl border border-sand bg-white/70 p-5">
+                        <h5 className="font-display text-lg font-semibold text-ink">Productos similares detectados</h5>
+                        <div className="mt-4 space-y-3">
+                          {similarProducts.slice(0, 4).map((item) => (
+                            <div key={item.id_producto} className="rounded-2xl border border-sand bg-white px-4 py-3 text-sm">
+                              <div className="flex items-start justify-between gap-3">
+                                <div>
+                                  <p className="font-semibold text-ink">{item.nombre || item.id_producto}</p>
+                                  <p className="text-xs text-slate-500">{item.marca || "Sin marca"} · {item.categoria || "Sin categoria"}</p>
+                                </div>
+                                <div className="text-right">
+                                  <p className="font-semibold text-ink">{formatMoney(item.precio_actual)}</p>
+                                  <p className="text-xs text-slate-500">{(Number(item.similarity_score || 0) * 100).toFixed(1)}% similitud</p>
+                                </div>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    ) : null}
                   </div>
                 ) : null}
 

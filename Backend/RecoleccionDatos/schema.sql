@@ -85,6 +85,7 @@ CREATE TABLE productos (
     stock               NUMBER(10) DEFAULT 0 NOT NULL,
     precio_fabricacion  NUMBER(10, 2),
     fecha_caducidad     DATE,
+    imagen_url          CLOB,
     fecha_actualizacion TIMESTAMP DEFAULT CURRENT_TIMESTAMP NOT NULL,
     CONSTRAINT pk_productos PRIMARY KEY (id_producto),
     CONSTRAINT chk_precio_actual CHECK (precio_actual >= 0)
@@ -101,6 +102,7 @@ COMMENT ON COLUMN productos.precio_actual IS 'Ultimo precio registrado o actual 
 COMMENT ON COLUMN productos.stock IS 'Cantidad disponible en inventario.';
 COMMENT ON COLUMN productos.precio_fabricacion IS 'Costo interno o precio de fabricacion.';
 COMMENT ON COLUMN productos.fecha_caducidad IS 'Fecha de caducidad del producto si aplica.';
+COMMENT ON COLUMN productos.imagen_url IS 'URL de la imagen del producto o data URL base64.';
 COMMENT ON COLUMN productos.fecha_actualizacion IS 'Fecha y hora del ultimo cambio o insercion de datos del producto.';
 
 BEGIN
@@ -111,6 +113,16 @@ EXCEPTION
             RAISE;
         END IF;
 END;
+
+BEGIN
+    EXECUTE IMMEDIATE 'ALTER TABLE productos ADD (imagen_url CLOB)';
+EXCEPTION
+    WHEN OTHERS THEN
+        IF SQLCODE != -1430 THEN
+            RAISE;
+        END IF;
+END;
+/
 / 
 
 BEGIN

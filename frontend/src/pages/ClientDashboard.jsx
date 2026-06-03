@@ -1,8 +1,10 @@
 import { useEffect, useMemo, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import toast from "react-hot-toast";
+import DashboardChartPanel from "../components/DashboardChartPanel.jsx";
 import ClientShell from "../components/ClientShell.jsx";
 import { addClientCartItem, clearClientCart, getClientCart, updateClientCartItem } from "../utils/clientCart.js";
+import { addNotification } from "../utils/notificationEvents.js";
 
 const API_URL = import.meta.env.VITE_API_URL || "http://localhost:8000";
 const PAGE_SIZE = 12;
@@ -137,6 +139,94 @@ export default function ClientDashboard() {
     });
   }, [products, categoryFilter, selectedMin, selectedMax]);
 
+  const chartOptions = useMemo(() => {
+    const categoryCounts = new Map();
+    const priceBuckets = [
+      { label: "0-49", value: 0 },
+      { label: "50-149", value: 0 },
+      { label: "150-299", value: 0 },
+      { label: "300+", value: 0 },
+    ];
+
+    for (const product of products) {
+      const categoryName = String(product.categoria || "Sin categoria").trim() || "Sin categoria";
+      categoryCounts.set(categoryName, (categoryCounts.get(categoryName) || 0) + 1);
+
+      const price = Number(product.precio_actual || 0);
+      if (price < 50) {
+        priceBuckets[0].value += 1;
+      } else if (price < 150) {
+        priceBuckets[1].value += 1;
+      } else if (price < 300) {
+        priceBuckets[2].value += 1;
+      } else {
+        priceBuckets[3].value += 1;
+      }
+    }
+
+    const recentTrend = recentPurchases.length
+      ? recentPurchases.map((purchase) => Number(purchase.monto_total || 0))
+      : [0, 0, 0, 0];
+
+    return [
+      {
+        key: "catalog-bars",
+        label: "Grafico de barras del catalogo",
+        kind: "bar",
+        description: "Muestra cuantas referencias hay por categoria. Es util para ver que familias dominan la tienda.",
+        labels: Array.from(categoryCounts.entries()).slice(0, 6).map(([category]) => category),
+        values: Array.from(categoryCounts.entries()).slice(0, 6).map(([, count]) => count),
+        unitLabel: "productos",
+        insights: [
+          "Sirve para comparar variedad de categorias.",
+          "Ayuda a detectar si el catalogo esta muy concentrado en pocas familias.",
+        ],
+      },
+      {
+        key: "price-histogram",
+        label: "Histograma de precios",
+        kind: "histogram",
+        description: "Agrupa los productos por rangos de precio para ver si el catalogo esta orientado a bajo, medio o alto costo.",
+        labels: priceBuckets.map((bucket) => bucket.label),
+        values: priceBuckets.map((bucket) => bucket.value),
+        insights: [
+          "Es util para comparar accesibilidad del catalogo.",
+          "Permite ver si predominan productos economicos o premium.",
+        ],
+      },
+      {
+        key: "purchase-line",
+        label: "Grafico de lineas de compras recientes",
+        kind: "line",
+        description: "Resume tus compras mas recientes para visualizar el ritmo del gasto o del consumo.",
+        labels: recentPurchases.length
+          ? recentPurchases.map((purchase, index) => `#${index + 1}`)
+          : ["1", "2", "3", "4"],
+        values: recentTrend,
+        unitLabel: "MXN",
+        insights: [
+          "Sirve para comparar tus compras recientes sin abrir el historial completo.",
+          "Ayuda a detectar si tus tickets estan creciendo o bajando.",
+        ],
+      },
+      {
+        key: "cart-share",
+        label: "Grafico de dona del carrito",
+        kind: "donut",
+        description: "Muestra la composicion del carrito entre articulos de bajo, medio y alto precio.",
+        slices: [
+          { label: "Bajo precio", value: cartItems.filter((item) => Number(item.precio_actual || 0) < 50).length, color: "#5CC49D" },
+          { label: "Precio medio", value: cartItems.filter((item) => Number(item.precio_actual || 0) >= 50 && Number(item.precio_actual || 0) < 300).length, color: "#3C9BE8" },
+          { label: "Precio alto", value: cartItems.filter((item) => Number(item.precio_actual || 0) >= 300).length, color: "#F26B5B" },
+        ],
+        insights: [
+          "Resume la mezcla del carrito en una sola vista.",
+          "Es practica para revisar si compras sobre todo productos baratos o de ticket alto.",
+        ],
+      },
+    ];
+  }, [cartItems, products, recentPurchases]);
+
   const truncateName = (value, maxLength = 28) => {
     const cleanValue = String(value || "").trim();
     if (!cleanValue) {
@@ -152,6 +242,12 @@ export default function ClientDashboard() {
     const nextCart = addClientCartItem(userId, product, 1);
     setCartItems(nextCart);
     toast.success(`${product.nombre} agregado al carrito.`);
+    addNotification({
+      kind: "cart",
+      title: "Producto agregado al carrito",
+      detail: `${product.nombre} se sumó al carrito del cliente.`,
+      source: "Marketplace",
+    });
   };
 
   const handleQuantityChange = (productId, nextQuantity) => {
@@ -188,6 +284,12 @@ export default function ClientDashboard() {
       await loadProducts(page, search);
       await loadRecentPurchases();
       toast.success("Compra registrada correctamente.");
+      addNotification({
+        kind: "purchase",
+        title: "Compra completada",
+        detail: `Se registró una compra con ${cartItems.length} productos.`,
+        source: "Marketplace",
+      });
     } catch (error) {
       toast.error(error.message || "No se pudo completar la compra.");
     } finally {
@@ -227,6 +329,13 @@ export default function ClientDashboard() {
               </div>
             </div>
           </div>
+
+          <DashboardChartPanel
+            title="Explora el comportamiento del cliente con graficos"
+            description="Elige la vista que te convenga: barras para categorias, histograma para precios, lineas para compras recientes o dona para el carrito."
+            options={chartOptions}
+            defaultKey="catalog-bars"
+          />
 
           <div className="grid gap-5 xl:grid-cols-[260px_minmax(0,1fr)]">
             <aside className="glass-panel h-fit p-5">

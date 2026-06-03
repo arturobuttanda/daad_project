@@ -19,6 +19,8 @@ from pydantic import BaseModel
 import numpy as np
 import io
 import csv
+from Backend.modelo_poo import Cliente, Persona, Producto, Venta, Vendedor, calcular_recomendacion_precio, crear_usuario_desde_fila_usuario
+from Backend.recomendacion_precio import rank_similar_products, summarize_similarity_prices
 
 ROOT_DIR = Path(__file__).resolve().parents[1]
 load_dotenv(ROOT_DIR / ".env")
@@ -86,6 +88,12 @@ class LoginRequest(BaseModel):
   tipo_usuario: str | None = None
 
 
+class ProfileUpdateRequest(BaseModel):
+  id_usuario: str
+  nombre: str | None = None
+  contrasena: str | None = None
+
+
 class ProductCreateRequest(BaseModel):
   id_producto: str
   nombre: str
@@ -95,6 +103,7 @@ class ProductCreateRequest(BaseModel):
   stock: int = 0
   precio_fabricacion: float | None = None
   fecha_caducidad: date | None = None
+  imagen_url: str | None = None
 
 
 class ProductUpdateRequest(BaseModel):
@@ -105,6 +114,7 @@ class ProductUpdateRequest(BaseModel):
   stock: int | None = None
   precio_fabricacion: float | None = None
   fecha_caducidad: date | None = None
+  imagen_url: str | None = None
 
 
 class PurchaseItemRequest(BaseModel):
@@ -218,6 +228,22 @@ def normalize_optional_text(value: str | None) -> str | None:
   return cleaned or None
 
 
+def normalize_display_text(value: object | None, fallback: str = "") -> str:
+  if value is None:
+    return fallback
+  cleaned = " ".join(str(value).split())
+  return cleaned or fallback
+
+
+def normalize_db_text(value: object | None) -> str | None:
+  if value is None:
+    return None
+  if hasattr(value, "read"):
+    value = value.read()
+  cleaned = " ".join(str(value).split())
+  return cleaned or None
+
+
 def product_row_to_dict(row: tuple) -> dict[str, object | None]:
   (
     id_producto,
@@ -230,19 +256,18 @@ def product_row_to_dict(row: tuple) -> dict[str, object | None]:
     fecha_caducidad,
     fecha_actualizacion,
   ) = row
-  return {
-    "id_producto": id_producto,
-    "nombre": nombre,
-    "marca": marca,
-    "categoria": categoria,
-    "precio_actual": float(precio_actual) if precio_actual is not None else None,
-    "stock": int(stock) if stock is not None else None,
-    "precio_fabricacion": float(precio_fabricacion) if precio_fabricacion is not None else None,
-    "fecha_caducidad": fecha_caducidad.isoformat() if fecha_caducidad else None,
-    "fecha_actualizacion": (
-      fecha_actualizacion.isoformat() if isinstance(fecha_actualizacion, (datetime, date)) else None
-    ),
-  }
+  # Replaced by Producto.from_row / Producto.desde_fila usages in codebase.
+  return Producto.from_row(row, [
+    "id_producto",
+    "nombre",
+    "marca",
+    "categoria",
+    "precio_actual",
+    "stock",
+    "precio_fabricacion",
+    "fecha_caducidad",
+    "fecha_actualizacion",
+  ]).to_dict()
 
 
 @app.get("/api/reportes/ventas/csv")
@@ -316,7 +341,7 @@ def export_sales_csv(period: str = Query("all")):
 
 
 BASE_PRODUCT_COLUMNS = ["id_producto", "nombre", "categoria", "precio_actual"]
-OPTIONAL_PRODUCT_COLUMNS = ["marca", "stock", "precio_fabricacion", "fecha_caducidad", "fecha_actualizacion"]
+OPTIONAL_PRODUCT_COLUMNS = ["marca", "stock", "precio_fabricacion", "fecha_caducidad", "imagen_url", "fecha_actualizacion"]
 
 
 @lru_cache(maxsize=1)
@@ -348,36 +373,43 @@ def build_product_select_columns() -> list[str]:
 
 
 def row_to_product_dict(row: tuple, selected_columns: list[str]) -> dict[str, object | None]:
-  values = dict(zip(selected_columns, row))
-  return {
-    "id_producto": values.get("id_producto"),
-    "nombre": values.get("nombre"),
-    "marca": values.get("marca"),
-    "categoria": values.get("categoria"),
-    "precio_actual": float(values["precio_actual"]) if values.get("precio_actual") is not None else None,
-    "stock": int(values["stock"]) if values.get("stock") is not None else None,
-    "precio_fabricacion": float(values["precio_fabricacion"]) if values.get("precio_fabricacion") is not None else None,
-    "fecha_caducidad": values["fecha_caducidad"].isoformat() if values.get("fecha_caducidad") else None,
-    "fecha_actualizacion": (
-      values["fecha_actualizacion"].isoformat() if values.get("fecha_actualizacion") else None
-    ),
-  }
+  # Delegate conversion to domain model for consistency
+  return Producto.from_row(row, selected_columns).to_dict()
 
 
-def build_product_insert_sql(payload: ProductCreateRequest) -> tuple[str, dict[str, object | None]]:
+def row_to_product_object(row: tuple, selected_columns: list[str]) -> Producto:
+  return Producto.desde_fila(row, selected_columns)
+
+
+def request_to_product_object(payload: ProductCreateRequest | ProductUpdateRequest, product_id: str | None = None) -> Producto:
+  return Producto(
+    id_producto=product_id or getattr(payload, "id_producto", ""),
+    nombre=getattr(payload, "nombre", "") or "",
+    marca=getattr(payload, "marca", None),
+    precio_venta_actual=getattr(payload, "precio_actual", None),
+    stock=getattr(payload, "stock", 0) or 0,
+    precio_fabricacion=getattr(payload, "precio_fabricacion", None),
+    fecha_caducidad=getattr(payload, "fecha_caducidad", None),
+    imagen_url=getattr(payload, "imagen_url", None),
+    categoria=getattr(payload, "categoria", None),
+  )
+
+
+def _build_product_insert_sql_from_object(product: Producto) -> tuple[str, dict[str, object | None]]:
   available = set(get_product_columns())
   columns: list[str] = []
   values: dict[str, object | None] = {}
 
   base_values = {
-    "id_producto": normalize_product_id(payload.id_producto),
-    "nombre": payload.nombre.strip(),
-    "marca": normalize_optional_text(payload.marca),
-    "categoria": normalize_optional_text(payload.categoria),
-    "precio_actual": payload.precio_actual,
-    "stock": payload.stock if payload.stock is not None else 0,
-    "precio_fabricacion": payload.precio_fabricacion,
-    "fecha_caducidad": payload.fecha_caducidad,
+    "id_producto": product.id_producto,
+    "nombre": product.nombre,
+    "marca": product.marca or None,
+    "categoria": product.categoria or None,
+    "precio_actual": product.precio_actual,
+    "stock": product.stock,
+    "precio_fabricacion": product.precio_fabricacion,
+    "fecha_caducidad": product.fecha_caducidad,
+    "imagen_url": product.imagen_url,
   }
 
   for column, value in base_values.items():
@@ -398,8 +430,8 @@ def build_product_insert_sql(payload: ProductCreateRequest) -> tuple[str, dict[s
   return sql, values
 
 
-def build_product_update_sql(
-  payload: ProductUpdateRequest,
+def _build_product_update_sql_from_object(
+  product: Producto,
   product_id: str,
   provided_fields: set[str] | None = None,
 ) -> tuple[str, dict[str, object | None]]:
@@ -408,18 +440,18 @@ def build_product_update_sql(
   values: dict[str, object | None] = {"id_producto": product_id}
 
   updates = {
-    "nombre": normalize_optional_text(payload.nombre),
-    "marca": normalize_optional_text(payload.marca),
-    "categoria": normalize_optional_text(payload.categoria),
-    "precio_actual": payload.precio_actual,
-    "stock": payload.stock,
-    "precio_fabricacion": payload.precio_fabricacion,
-    "fecha_caducidad": payload.fecha_caducidad,
+    "nombre": product.nombre,
+    "marca": product.marca or None,
+    "categoria": product.categoria or None,
+    "precio_actual": product.precio_actual,
+    "stock": product.stock,
+    "precio_fabricacion": product.precio_fabricacion,
+    "fecha_caducidad": product.fecha_caducidad,
+    "imagen_url": product.imagen_url,
   }
 
   for column, value in updates.items():
     if column in available:
-      # Si el campo fue enviado explícitamente con valor None, queremos setear NULL
       if provided_fields and column in provided_fields and value is None:
         assignments.append(f"{column} = NULL")
       elif value is not None:
@@ -439,19 +471,49 @@ def build_product_update_sql(
   return sql, values
 
 
+def build_product_insert_sql(payload: ProductCreateRequest) -> tuple[str, dict[str, object | None]]:
+  producto = request_to_product_object(payload, normalize_product_id(payload.id_producto))
+  return _build_product_insert_sql_from_object(producto)
+
+
+def build_product_update_sql(
+  payload: ProductUpdateRequest,
+  product_id: str,
+  provided_fields: set[str] | None = None,
+) -> tuple[str, dict[str, object | None]]:
+  producto = request_to_product_object(payload, product_id)
+  if payload.nombre is not None:
+    producto.nombre = payload.nombre.strip()
+  if payload.marca is not None:
+    producto.marca = normalize_optional_text(payload.marca)
+  if payload.categoria is not None:
+    producto.categoria = normalize_optional_text(payload.categoria)
+  if payload.precio_actual is not None:
+    producto.cambiar_precio(payload.precio_actual)
+  if payload.stock is not None:
+    producto.actualizar_stock(payload.stock)
+  if payload.precio_fabricacion is not None:
+    producto.precio_fabricacion = payload.precio_fabricacion
+  if payload.fecha_caducidad is not None:
+    producto.fecha_caducidad = payload.fecha_caducidad
+  if payload.imagen_url is not None:
+    producto.imagen_url = normalize_optional_text(payload.imagen_url)
+  return _build_product_update_sql_from_object(producto, product_id, provided_fields)
+
+
 SQL_LIST_PRODUCTOS = (
-  "SELECT id_producto, nombre, marca, categoria, precio_actual, stock, precio_fabricacion, "
+  "SELECT id_producto, nombre, marca, categoria, precio_actual, stock, precio_fabricacion, imagen_url, "
   "fecha_caducidad, fecha_actualizacion FROM productos ORDER BY fecha_actualizacion DESC, nombre ASC"
 )
 
 SQL_GET_PRODUCTO = (
-  "SELECT id_producto, nombre, marca, categoria, precio_actual, stock, precio_fabricacion, "
+  "SELECT id_producto, nombre, marca, categoria, precio_actual, stock, precio_fabricacion, imagen_url, "
   "fecha_caducidad, fecha_actualizacion FROM productos WHERE id_producto = :id_producto"
 )
 
 SQL_INSERT_PRODUCTO = (
-  "INSERT INTO productos (id_producto, nombre, marca, categoria, precio_actual, stock, precio_fabricacion, fecha_caducidad) "
-  "VALUES (:id_producto, :nombre, :marca, :categoria, :precio_actual, :stock, :precio_fabricacion, :fecha_caducidad)"
+  "INSERT INTO productos (id_producto, nombre, marca, categoria, precio_actual, stock, precio_fabricacion, fecha_caducidad, imagen_url) "
+  "VALUES (:id_producto, :nombre, :marca, :categoria, :precio_actual, :stock, :precio_fabricacion, :fecha_caducidad, :imagen_url)"
 )
 
 SQL_UPDATE_PRODUCTO = (
@@ -463,6 +525,7 @@ SQL_UPDATE_PRODUCTO = (
   "stock = COALESCE(:stock, stock), "
   "precio_fabricacion = COALESCE(:precio_fabricacion, precio_fabricacion), "
   "fecha_caducidad = COALESCE(:fecha_caducidad, fecha_caducidad), "
+  "imagen_url = COALESCE(:imagen_url, imagen_url), "
   "fecha_actualizacion = CURRENT_TIMESTAMP "
   "WHERE id_producto = :id_producto"
 )
@@ -489,7 +552,8 @@ def fetch_producto_by_id(product_id: str) -> dict[str, object | None] | None:
 
   if not row:
     return None
-  return row_to_product_dict(row, selected_columns)
+  producto = Producto.from_row(row, selected_columns)
+  return producto.to_dict()
 
 
 def fetch_price_history(product_id: str, limit: int = 12) -> list[dict[str, object]]:
@@ -574,95 +638,91 @@ def fetch_product_vendor(product_id: str) -> dict[str, object | None] | None:
   }
 
 
+def fetch_persona_by_id(user_id: str) -> Persona | None:
+  try:
+    with get_connection() as connection:
+      with connection.cursor() as cursor:
+        cursor.execute(
+          "SELECT id_usuario, nombre, telefono, correo, tipo_usuario FROM usuarios WHERE id_usuario = :id_usuario",
+          {"id_usuario": user_id},
+        )
+        row = cursor.fetchone()
+  except Exception as exc:
+    logger.exception("Error al consultar usuario: %s", exc)
+    raise HTTPException(
+      status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+      detail="No se pudo consultar el usuario.",
+    )
+
+  if not row:
+    return None
+  return Persona.from_row(row)
+
+
+def fetch_similarity_catalog_signature() -> tuple[int, str]:
+  try:
+    with get_connection() as connection:
+      with connection.cursor() as cursor:
+        cursor.execute("SELECT COUNT(*), MAX(fecha_actualizacion) FROM productos")
+        row = cursor.fetchone()
+  except Exception as exc:
+    logger.exception("Error al consultar la firma del catalogo para similitud: %s", exc)
+    raise HTTPException(
+      status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+      detail="No se pudo consultar el catalogo de productos.",
+    )
+
+  total_items = int(row[0] or 0) if row else 0
+  latest_update = row[1].isoformat() if row and row[1] else ""
+  return total_items, latest_update
+
+
+@lru_cache(maxsize=8)
+def load_similarity_catalog(signature: tuple[int, str]) -> list[dict[str, object | None]]:
+  try:
+    with get_connection() as connection:
+      with connection.cursor() as cursor:
+        cursor.execute(
+          "SELECT id_producto, nombre, marca, categoria, precio_actual, stock, precio_fabricacion, fecha_actualizacion FROM productos ORDER BY nombre ASC"
+        )
+        rows = cursor.fetchall()
+  except Exception as exc:
+    logger.exception("Error al cargar el catalogo para similitud: %s", exc)
+    raise HTTPException(
+      status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+      detail="No se pudo cargar el catalogo de productos.",
+    )
+
+  catalog: list[dict[str, object | None]] = []
+  for row in rows:
+    catalog.append(
+      {
+        "id_producto": row[0],
+        "nombre": row[1],
+        "marca": row[2],
+        "categoria": row[3],
+        "precio_actual": float(row[4]) if row[4] is not None else None,
+        "stock": int(row[5]) if row[5] is not None else 0,
+        "precio_fabricacion": float(row[6]) if row[6] is not None else None,
+        "fecha_actualizacion": row[7].isoformat() if row[7] else None,
+      }
+    )
+  return catalog
+
+
 def calculate_price_recommendation(
   product: dict[str, object | None],
   history: list[dict[str, object]],
   competition_average: float | None,
 ) -> dict[str, object | None]:
-  current_price = float(product.get("precio_actual") or 0)
-  cost_price = float(product.get("precio_fabricacion") or 0)
-  stock = int(product.get("stock") or 0)
-
-  history_prices = [float(item["precio"]) for item in history if item.get("precio") is not None]
-  history_dates = [
-    datetime.fromisoformat(item["fecha"]) if item.get("fecha") else datetime.utcnow()
-    for item in history
-  ]
-
-  average_history = float(np.mean(history_prices)) if history_prices else current_price
-  minimum_history = float(np.min(history_prices)) if history_prices else current_price
-  latest_date = history_dates[-1] if history_dates else datetime.utcnow()
-  stagnant_days = max((datetime.utcnow() - latest_date).days, 0)
-  competition_gap = (
-    ((current_price - competition_average) / competition_average)
-    if competition_average and competition_average > 0
-    else 0.0
+  product_object = Producto.desde_dict(product)
+  return calcular_recomendacion_precio(
+    product_object,
+    history,
+    competition_average,
+    load_similarity_catalog(fetch_similarity_catalog_signature()),
+    limite=5,
   )
-  margin = ((current_price - cost_price) / cost_price) if cost_price > 0 else 0.0
-
-  if current_price <= minimum_history * 1.02:
-    signal = "es el precio más bajo de los últimos días"
-  elif current_price > average_history * 1.03:
-    signal = "el precio está por arriba del promedio"
-  else:
-    signal = "el precio está en su precio promedio"
-
-  suggested_price = current_price
-  reason = "El precio actual se mantiene competitivo."
-
-  if cost_price > 0 and margin < 0.1:
-    suggested_price = round(cost_price * 1.1, 2)
-    reason = "Se ajusta para asegurar una ganancia superior al 10%."
-  elif stagnant_days >= 21 and competition_gap > 0:
-    floor_price = round(cost_price * 1.1, 2) if cost_price > 0 else current_price * 0.95
-    suggested_price = max(floor_price, round(current_price * 0.95, 2))
-    reason = "El producto lleva demasiado tiempo estancado; conviene bajar el precio para aumentar el giro."
-  elif competition_average and current_price > competition_average * 1.05:
-    floor_price = round(cost_price * 1.1, 2) if cost_price > 0 else current_price * 0.95
-    suggested_price = max(floor_price, round(competition_average * 0.99, 2))
-    reason = "El precio está por encima de la competencia de mercado."
-  elif stock >= 40 and current_price > average_history:
-    floor_price = round(cost_price * 1.1, 2) if cost_price > 0 else current_price * 0.97
-    suggested_price = max(floor_price, round(current_price * 0.97, 2))
-    reason = "Hay inventario suficiente; una ligera bajada puede acelerar la rotación."
-
-  trend_label = "estable"
-  estimated_buy_date = None
-  slope = 0.0
-
-  if len(history_prices) >= 2:
-    x_values = np.array([(item_date - history_dates[0]).days for item_date in history_dates], dtype=float)
-    y_values = np.array(history_prices, dtype=float)
-    slope, intercept = np.polyfit(x_values, y_values, 1)
-    if slope < 0 and suggested_price < current_price:
-      days_until_target = (suggested_price - history_prices[-1]) / slope if slope != 0 else None
-      if days_until_target and days_until_target > 0:
-        estimated_date = history_dates[-1] + timedelta(days=math.ceil(days_until_target))
-        estimated_buy_date = estimated_date.date().isoformat()
-        trend_label = "a la baja"
-    elif slope > 0:
-      trend_label = "al alza"
-
-  features = np.array([
-    margin,
-    max(competition_gap, 0.0),
-    min(stagnant_days / 30.0, 3.0),
-    min(stock / 50.0, 2.0),
-  ])
-  weights = np.array([0.50, 0.25, 0.15, -0.10])
-  vector_score = float(np.dot(features, weights))
-
-  return {
-    "signal": signal,
-    "suggested_price": suggested_price,
-    "reason": reason,
-    "margin_percent": round(margin * 100, 2),
-    "competition_average": competition_average,
-    "trend_label": trend_label,
-    "estimated_buy_date": estimated_buy_date,
-    "stagnant_days": stagnant_days,
-    "vector_score": round(vector_score, 4),
-  }
 
 
 def build_client_product_detail(product_id: str) -> dict[str, object | None]:
@@ -685,6 +745,28 @@ def build_client_product_detail(product_id: str) -> dict[str, object | None]:
     "competition_average": competition_average,
     "recommendation": recommendation,
   }
+
+
+@app.post("/api/productos/recomendacion-precio")
+def recommend_product_price(payload: ProductCreateRequest):
+  draft_product = Producto(
+    id_producto=normalize_product_id(payload.id_producto),
+    nombre=payload.nombre,
+    marca=payload.marca,
+    precio_venta_actual=payload.precio_actual,
+    stock=payload.stock,
+    precio_fabricacion=payload.precio_fabricacion,
+    fecha_caducidad=payload.fecha_caducidad,
+    imagen_url=payload.imagen_url,
+    categoria=payload.categoria,
+  )
+  return calcular_recomendacion_precio(
+    draft_product,
+    [],
+    None,
+    load_similarity_catalog(fetch_similarity_catalog_signature()),
+    limite=5,
+  )
 
 
 @app.get("/api/health")
@@ -745,12 +827,11 @@ def register_user(payload: RegisterRequest):
       detail="No se pudo registrar el usuario.",
     )
 
-  return {
-    "id": user_id,
-    "nombre": payload.nombre.strip(),
-    "correo": email,
-    "tipo_usuario": tipo_usuario,
-  }
+  nuevo_usuario = crear_usuario_desde_fila_usuario(
+    (user_id, payload.nombre.strip(), payload.telefono.strip(), email, tipo_usuario),
+    password_hash=password_hash,
+  )
+  return nuevo_usuario.to_public_dict()
 
 
 @app.post("/api/auth/login")
@@ -765,7 +846,7 @@ def login_user(payload: LoginRequest):
 
   query_roles_by_email = "SELECT tipo_usuario FROM usuarios WHERE correo = :correo"
   query_user = (
-    "SELECT id_usuario, nombre, correo, tipo_usuario, password_hash "
+    "SELECT id_usuario, nombre, telefono, correo, tipo_usuario, password_hash "
     "FROM usuarios WHERE correo = :correo AND tipo_usuario = :tipo_usuario"
   )
 
@@ -816,19 +897,82 @@ def login_user(payload: LoginRequest):
       detail="Credenciales incorrectas.",
     )
 
-  user_id, nombre, correo, tipo_usuario, password_hash = row
+  user = crear_usuario_desde_fila_usuario(row[:5], password_hash=row[5])
+  user_id, nombre, telefono, correo, tipo_usuario, password_hash = row
   if not pwd_context.verify(payload.contrasena, password_hash):
     raise HTTPException(
       status_code=status.HTTP_401_UNAUTHORIZED,
       detail="Credenciales incorrectas.",
     )
 
-  return {
-    "id": user_id,
-    "nombre": nombre,
-    "correo": correo,
-    "tipo_usuario": tipo_usuario,
-  }
+  return user.to_public_dict()
+
+
+@app.put("/api/auth/profile")
+def update_profile(payload: ProfileUpdateRequest):
+  user_id = payload.id_usuario.strip()
+  new_name = normalize_optional_text(payload.nombre)
+  new_password = payload.contrasena.strip() if payload.contrasena is not None else None
+
+  if not user_id:
+    raise HTTPException(
+      status_code=status.HTTP_400_BAD_REQUEST,
+      detail="El usuario es obligatorio.",
+    )
+
+  if new_name is None and not new_password:
+    raise HTTPException(
+      status_code=status.HTTP_400_BAD_REQUEST,
+      detail="Debes proporcionar un nombre o una contrasena nueva.",
+    )
+
+  if new_password and not validate_password(new_password):
+    raise HTTPException(
+      status_code=status.HTTP_400_BAD_REQUEST,
+      detail="La nueva contrasena no cumple los criterios.",
+    )
+
+  update_parts: list[str] = []
+  params: dict[str, object] = {"id_usuario": user_id}
+  if new_name is not None:
+    update_parts.append("nombre = :nombre")
+    params["nombre"] = new_name
+  if new_password:
+    update_parts.append("password_hash = :password_hash")
+    params["password_hash"] = pwd_context.hash(new_password)
+
+  query_user = "SELECT id_usuario, nombre, telefono, correo, tipo_usuario FROM usuarios WHERE id_usuario = :id_usuario"
+  query_update = f"UPDATE usuarios SET {', '.join(update_parts)} WHERE id_usuario = :id_usuario"
+
+  try:
+    with get_connection() as connection:
+      with connection.cursor() as cursor:
+        cursor.execute(query_user, {"id_usuario": user_id})
+        row = cursor.fetchone()
+        if not row:
+          raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="El usuario no existe.",
+          )
+
+        cursor.execute(query_update, params)
+        connection.commit()
+  except HTTPException:
+    raise
+  except Exception as exc:
+    logger.exception("Error al actualizar perfil: %s", exc)
+    raise HTTPException(
+      status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+      detail="No se pudo actualizar el perfil.",
+    )
+
+  persona = crear_usuario_desde_fila_usuario(row)
+  persona.actualizar_perfil(
+    nombre=new_name if new_name is not None else None,
+    contrasena_hash=params.get("password_hash") if new_password else None,
+  )
+
+  return persona.to_public_dict()
 
 
 @app.get("/api/productos")
@@ -856,7 +1000,7 @@ def list_productos(page: int = Query(1, ge=1), page_size: int = Query(20, ge=1, 
     )
 
   return {
-    "items": [row_to_product_dict(row, selected_columns) for row in rows],
+    "items": [Producto.from_row(row, selected_columns).to_dict() for row in rows],
     "page": current_page,
     "page_size": page_size,
     "total_items": total_items,
@@ -933,6 +1077,7 @@ def create_producto(payload: ProductCreateRequest):
   nombre = payload.nombre.strip()
   marca = normalize_optional_text(payload.marca)
   categoria = normalize_optional_text(payload.categoria)
+  imagen_url = normalize_optional_text(payload.imagen_url)
 
   if not product_id:
     raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="El id del producto es obligatorio.")
@@ -945,6 +1090,18 @@ def create_producto(payload: ProductCreateRequest):
   if payload.precio_fabricacion is not None and payload.precio_fabricacion < 0:
     raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="El costo no puede ser negativo.")
 
+  producto = Producto(
+    id_producto=product_id,
+    nombre=nombre,
+    marca=marca,
+    precio_venta_actual=payload.precio_actual,
+    stock=payload.stock if payload.stock is not None else 0,
+    precio_fabricacion=payload.precio_fabricacion,
+    fecha_caducidad=payload.fecha_caducidad,
+    imagen_url=imagen_url,
+    categoria=categoria,
+  )
+
   existing = fetch_producto_by_id(product_id)
   if existing:
     raise HTTPException(
@@ -955,7 +1112,7 @@ def create_producto(payload: ProductCreateRequest):
   try:
     with get_connection() as connection:
       with connection.cursor() as cursor:
-        sql, values = build_product_insert_sql(payload)
+        sql, values = build_product_insert_sql(producto)
         cursor.execute(sql, values)
         connection.commit()
   except HTTPException:
@@ -988,11 +1145,23 @@ def update_producto(product_id: str, payload: ProductUpdateRequest):
   if payload.precio_fabricacion is not None and payload.precio_fabricacion < 0:
     raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="El costo no puede ser negativo.")
 
+  producto = Producto.desde_dict(existing)
+  producto.actualizar_datos(
+    nombre=payload.nombre.strip() if payload.nombre is not None else None,
+    marca=normalize_optional_text(payload.marca) if payload.marca is not None else None,
+    categoria=normalize_optional_text(payload.categoria) if payload.categoria is not None else None,
+    precio_actual=payload.precio_actual,
+    stock=payload.stock,
+    precio_fabricacion=payload.precio_fabricacion,
+    fecha_caducidad=payload.fecha_caducidad,
+    imagen_url=normalize_optional_text(payload.imagen_url) if payload.imagen_url is not None else None,
+  )
+
   try:
     with get_connection() as connection:
       with connection.cursor() as cursor:
         provided = set(getattr(payload, "__fields_set__", set()))
-        sql, values = build_product_update_sql(payload, normalized_id, provided)
+        sql, values = build_product_update_sql(producto, normalized_id, provided)
         logger.info("SQL UPDATE: %s", sql)
         logger.info("UPDATE values: %s", values)
         cursor.execute(sql, values)
@@ -1101,20 +1270,18 @@ def list_client_products(
 
   items = []
   for row in rows:
-    items.append(
+    producto = Producto.from_row(
+      row,
+      ["id_producto", "nombre", "marca", "categoria", "precio_actual", "stock", "precio_fabricacion", "fecha_actualizacion"],
+    )
+    producto_dict = producto.to_dict()
+    producto_dict.update(
       {
-        "id_producto": row[0],
-        "nombre": row[1],
-        "marca": row[2],
-        "categoria": row[3],
-        "precio_actual": float(row[4]) if row[4] is not None else None,
-        "stock": int(row[5]) if row[5] is not None else 0,
-        "precio_fabricacion": float(row[6]) if row[6] is not None else None,
-        "fecha_actualizacion": row[7].isoformat() if row[7] else None,
         "vendedor_nombre": row[8],
         "codigo_vendedor": row[9],
       }
     )
+    items.append(producto_dict)
 
   return {
     "items": items,
@@ -1143,30 +1310,38 @@ def create_purchase(payload: PurchaseRequest):
   total_amount = 0.0
   total_units = 0
   ticket_items: list[dict[str, object]] = []
+  cliente: Cliente | None = None
+  vendedor: Vendedor | None = None
 
   try:
     with get_connection() as connection:
       with connection.cursor() as cursor:
         cursor.execute(
-          "SELECT id_usuario FROM usuarios WHERE id_usuario = :id_usuario AND tipo_usuario = 'Cliente'",
+          "SELECT id_usuario, nombre, telefono, correo, tipo_usuario FROM usuarios WHERE id_usuario = :id_usuario AND tipo_usuario = 'Cliente'",
           {"id_usuario": client_id},
         )
-        if not cursor.fetchone():
+        client_row = cursor.fetchone()
+        if not client_row:
           raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="El cliente no existe.",
           )
+        cliente = crear_usuario_desde_fila_usuario(client_row)
 
         if sale_vendor_id:
           cursor.execute(
-            "SELECT id_vendedor FROM vendedores WHERE id_vendedor = :id_vendedor",
-            {"id_vendedor": sale_vendor_id},
+            "SELECT u.id_usuario, u.nombre, u.telefono, u.correo, u.tipo_usuario "
+            "FROM usuarios u JOIN vendedores v ON v.id_vendedor = u.id_usuario "
+            "WHERE u.id_usuario = :id_usuario",
+            {"id_usuario": sale_vendor_id},
           )
-          if not cursor.fetchone():
+          vendor_row = cursor.fetchone()
+          if not vendor_row:
             raise HTTPException(
               status_code=status.HTTP_404_NOT_FOUND,
               detail="El vendedor no existe.",
             )
+          vendedor = crear_usuario_desde_fila_usuario(vendor_row)
 
         # insertar cabecera de la venta primero para respetar la FK de detalle
         logger.info("Creando venta %s para cliente %s (vendedor=%s)", sale_id, client_id, sale_vendor_id)
@@ -1216,12 +1391,32 @@ def create_purchase(payload: PurchaseRequest):
           current_stock = int(current_stock or 0)
           price_value = float(price_actual or 0)
           cost_value = float(product_cost or 0) if product_cost is not None else None
+          product_object = Producto(
+            id_producto=product_id,
+            nombre=product_name,
+            marca=product_brand,
+            precio_venta_actual=price_value,
+            stock=current_stock,
+            precio_fabricacion=cost_value,
+          )
 
           if current_stock < quantity:
             raise HTTPException(
               status_code=status.HTTP_400_BAD_REQUEST,
               detail=f"No hay stock suficiente para {product_name}.",
             )
+
+          if vendedor is None and sale_vendor_id is None and product_vendor_id:
+            sale_vendor_id = product_vendor_id
+            cursor.execute(
+              "SELECT u.id_usuario, u.nombre, u.telefono, u.correo, u.tipo_usuario "
+              "FROM usuarios u JOIN vendedores v ON v.id_vendedor = u.id_usuario "
+              "WHERE u.id_usuario = :id_usuario",
+              {"id_usuario": sale_vendor_id},
+            )
+            vendor_row = cursor.fetchone()
+            if vendor_row:
+              vendedor = crear_usuario_desde_fila_usuario(vendor_row)
 
           cursor.execute(
             "UPDATE productos SET stock = stock - :cantidad, fecha_actualizacion = CURRENT_TIMESTAMP "
@@ -1233,6 +1428,27 @@ def create_purchase(payload: PurchaseRequest):
           profit = round((price_value - (cost_value or 0)) * quantity, 2) if cost_value is not None else None
           total_amount += subtotal
           total_units += quantity
+
+          if vendedor is not None:
+            venta_obj = vendedor.vender_producto(
+              product_object,
+              quantity,
+              fecha_venta=datetime.utcnow(),
+              total_pagado=subtotal,
+              id_venta=sale_id,
+            )
+          else:
+            venta_obj = Venta.desde_detalle(
+              sale_id,
+              product_object,
+              quantity,
+              datetime.utcnow(),
+              price_value,
+            )
+
+          if cliente is not None:
+            cliente.registrar_compra(venta_obj)
+
           ticket_items.append(
             {
               "id_producto": product_id,
@@ -1311,15 +1527,11 @@ def list_client_purchases(
 
   where_clause = " WHERE " + " AND ".join(filters)
 
-  query_count = f"SELECT COUNT(*) FROM ventas v{where_clause}"
+  query_count = f"SELECT COUNT(DISTINCT v.id_venta) FROM ventas v{where_clause}"
   query_list = (
-    "SELECT v.id_venta, v.fecha_venta, v.monto_total, v.total_unidades, "
-    "LISTAGG(d.id_producto || ' x' || d.cantidad, ', ') WITHIN GROUP (ORDER BY d.id_producto) AS resumen "
-    "FROM ventas v "
-    "JOIN venta_detalle d ON d.id_venta = v.id_venta"
-    f"{where_clause} "
-    "GROUP BY v.id_venta, v.fecha_venta, v.monto_total, v.total_unidades "
-    "ORDER BY v.fecha_venta DESC OFFSET :offset ROWS FETCH NEXT :page_size ROWS ONLY"
+    "SELECT v.id_venta, v.fecha_venta, v.monto_total, v.total_unidades "
+    f"FROM ventas v{where_clause} "
+    "ORDER BY v.fecha_venta DESC, v.id_venta DESC OFFSET :offset ROWS FETCH NEXT :page_size ROWS ONLY"
   )
 
   try:
@@ -1339,6 +1551,29 @@ def list_client_purchases(
           },
         )
         rows = cursor.fetchall()
+        sale_ids = [row[0] for row in rows]
+        details_by_sale: dict[object, list[dict[str, object]]] = {}
+        if sale_ids:
+          detail_placeholders = ", ".join(f":sale_{index}" for index in range(len(sale_ids)))
+          detail_query = (
+            "SELECT d.id_venta, d.id_producto, p.nombre, d.cantidad "
+            "FROM venta_detalle d "
+            "LEFT JOIN productos p ON p.id_producto = d.id_producto "
+            f"WHERE d.id_venta IN ({detail_placeholders}) "
+            "ORDER BY d.id_venta DESC, d.id_producto ASC"
+          )
+          cursor.execute(
+            detail_query,
+            {f"sale_{index}": sale_id for index, sale_id in enumerate(sale_ids)},
+          )
+          for sale_id, product_id, product_name, quantity in cursor.fetchall():
+            details_by_sale.setdefault(sale_id, []).append(
+              {
+                "id_producto": product_id,
+                "nombre": normalize_display_text(product_name, "Producto sin nombre"),
+                "cantidad": int(quantity) if quantity is not None else 0,
+              }
+            )
   except Exception as exc:
     logger.exception("Error al listar compras: %s", exc)
     raise HTTPException(
@@ -1348,13 +1583,23 @@ def list_client_purchases(
 
   items = []
   for row in rows:
+    sale_id = row[0]
+    products = details_by_sale.get(sale_id, [])
+    resumen = ", ".join(
+      f"{product['nombre']} x{product['cantidad']}"
+      for product in products[:3]
+    )
+    if len(products) > 3:
+      resumen = f"{resumen}, +{len(products) - 3} más" if resumen else f"+{len(products) - 3} más"
     items.append(
       {
-        "id_venta": row[0],
+        "id_venta": sale_id,
         "fecha_venta": row[1].isoformat() if row[1] else None,
         "monto_total": float(row[2]) if row[2] is not None else 0.0,
         "total_unidades": int(row[3]) if row[3] is not None else 0,
-        "resumen": row[4],
+        "numero_pedido": str(sale_id),
+        "resumen": resumen,
+        "productos": products,
       }
     )
 

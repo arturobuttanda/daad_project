@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import toast from "react-hot-toast";
 import ClientShell from "../components/ClientShell.jsx";
+import { addNotification } from "../utils/notificationEvents.js";
 
 const API_URL = import.meta.env.VITE_API_URL || "http://localhost:8000";
 const PERIODS = [
@@ -17,6 +18,22 @@ function formatMoney(value) {
     currency: "MXN",
     maximumFractionDigits: 2,
   }).format(Number(value || 0));
+}
+
+function truncateText(value, maxLength = 48) {
+  const cleanValue = String(value || "").trim();
+  if (!cleanValue) {
+    return "Producto";
+  }
+  if (cleanValue.length <= maxLength) {
+    return cleanValue;
+  }
+  return `${cleanValue.slice(0, maxLength - 3)}...`;
+}
+
+function buildProductPreview(products = [], maxVisible = 3) {
+  const visibleProducts = Array.isArray(products) ? products.slice(0, maxVisible) : [];
+  return visibleProducts.map((item) => `${truncateText(item.nombre, 42)} x${item.cantidad}`).join(" · ");
 }
 
 export default function ClientHistory() {
@@ -68,6 +85,12 @@ export default function ClientHistory() {
         throw new Error(data.detail || "No se pudo cargar el ticket.");
       }
       setSelectedTicket(data);
+      addNotification({
+        kind: "history",
+        title: "Ticket abierto",
+        detail: `Se abrió el detalle del pedido ${saleId}.`,
+        source: "Historial",
+      });
     } catch (error) {
       toast.error(error.message || "No se pudo cargar el ticket.");
     }
@@ -115,16 +138,62 @@ export default function ClientHistory() {
                   key={purchase.id_venta}
                   type="button"
                   onClick={() => openTicket(purchase.id_venta)}
-                  className="w-full rounded-3xl border border-sand bg-white/70 p-4 text-left transition hover:bg-white"
+                  className="w-full rounded-3xl border border-sand bg-white p-5 text-left transition hover:-translate-y-0.5 hover:bg-white hover:shadow-[0_12px_30px_rgba(11,27,43,0.06)]"
                 >
-                  <div className="flex flex-wrap items-center justify-between gap-3">
-                    <div>
-                      <p className="font-semibold text-ink">{purchase.resumen || purchase.id_venta}</p>
-                      <p className="mt-1 text-xs text-slate-500">{purchase.fecha_venta}</p>
+                  <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+                    <div className="min-w-0 flex-1">
+                      <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
+                        <div>
+                          <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">
+                            Pedido n.º {purchase.numero_pedido || purchase.id_venta}
+                          </p>
+                          <p className="mt-1 text-sm text-slate-600">{purchase.fecha_venta}</p>
+                        </div>
+                        <span className="rounded-full bg-[#EAF2FF] px-3 py-1 text-xs font-semibold text-ocean">
+                          Compra registrada
+                        </span>
+                      </div>
+
+                      <div className="mt-4 space-y-3">
+                        {Array.isArray(purchase.productos) && purchase.productos.length > 0 ? (
+                          purchase.productos.slice(0, 3).map((item) => (
+                            <div key={`${purchase.id_venta}-${item.id_producto}`} className="flex items-start gap-3">
+                              <span className="mt-2 h-2 w-2 flex-none rounded-full bg-ocean" />
+                              <div className="min-w-0">
+                                <p className="truncate text-sm font-medium text-ink">{truncateText(item.nombre, 72)}</p>
+                                <p className="text-xs text-slate-500">{item.cantidad} unidades</p>
+                              </div>
+                            </div>
+                          ))
+                        ) : (
+                          <p className="text-sm text-slate-500">{truncateText(purchase.resumen || purchase.id_venta, 72)}</p>
+                        )}
+                        {Array.isArray(purchase.productos) && purchase.productos.length > 3 ? (
+                          <p className="text-xs text-slate-500">
+                            +{purchase.productos.length - 3} productos más
+                          </p>
+                        ) : null}
+                        {purchase.resumen ? (
+                          <p className="text-xs text-slate-500">{truncateText(purchase.resumen, 96)}</p>
+                        ) : null}
+                        <p className="text-xs text-slate-500">{buildProductPreview(purchase.productos)}</p>
+                      </div>
                     </div>
-                    <div className="text-right">
-                      <p className="text-sm font-semibold text-ink">{formatMoney(purchase.monto_total)}</p>
+
+                    <div className="flex flex-col items-start gap-3 lg:items-end">
+                      <p className="text-xs uppercase tracking-wide text-slate-500">Total</p>
+                      <p className="text-2xl font-semibold text-ink">{formatMoney(purchase.monto_total)}</p>
                       <p className="text-xs text-slate-500">{purchase.total_unidades} unidades</p>
+                      <button
+                        type="button"
+                        className="secondary-button"
+                        onClick={(event) => {
+                          event.stopPropagation();
+                          openTicket(purchase.id_venta);
+                        }}
+                      >
+                        Ver detalles del pedido
+                      </button>
                     </div>
                   </div>
                 </button>
@@ -163,7 +232,7 @@ export default function ClientHistory() {
             {selectedTicket ? (
               <div className="mt-4 space-y-3">
                 <div className="rounded-2xl border border-sand bg-white/70 p-4">
-                  <p className="text-xs uppercase tracking-wide text-slate-500">ID venta</p>
+                  <p className="text-xs uppercase tracking-wide text-slate-500">Pedido n.º</p>
                   <p className="mt-1 font-semibold text-ink">{selectedTicket.id_venta}</p>
                 </div>
                 <div className="rounded-2xl border border-sand bg-white/70 p-4">
@@ -177,7 +246,7 @@ export default function ClientHistory() {
                 <div className="space-y-2">
                   {selectedTicket.items.map((item) => (
                     <div key={`${item.id_producto}-${item.nombre}`} className="rounded-2xl border border-sand bg-white/70 p-4 text-sm">
-                      <p className="font-semibold text-ink">{item.nombre}</p>
+                      <p className="truncate font-semibold text-ink">{truncateText(item.nombre, 64)}</p>
                       <p className="mt-1 text-slate-600">{item.marca || "Sin marca"}</p>
                       <p className="mt-1 text-slate-600">
                         {item.cantidad} unidades · {formatMoney(item.precio_unitario)} c/u
