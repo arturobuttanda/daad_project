@@ -3,7 +3,14 @@ from __future__ import annotations
 from typing import Iterable
 
 import numpy as np
-from rapidfuzz import fuzz
+
+try:
+  from rapidfuzz import fuzz
+  _HAS_RAPIDFUZZ = True
+except ImportError:
+  import difflib
+  fuzz = None
+  _HAS_RAPIDFUZZ = False
 
 
 def normalize_similarity_text(value: object | None) -> str:
@@ -40,12 +47,16 @@ def fuzzy_similarity(left_text: str, right_text: str) -> float:
     return 0.0
 
   # token-based ratios are in 0-100
-  try:
-    ts = float(fuzz.token_sort_ratio(left_value, right_value))
-    tset = float(fuzz.token_set_ratio(left_value, right_value))
-  except Exception:
-    # fallback to simple ratio
-    ts = float(fuzz.ratio(left_value, right_value))
+  if _HAS_RAPIDFUZZ and fuzz is not None:
+    try:
+      ts = float(fuzz.token_sort_ratio(left_value, right_value))
+      tset = float(fuzz.token_set_ratio(left_value, right_value))
+    except Exception:
+      ts = float(fuzz.ratio(left_value, right_value))
+      tset = ts
+  else:
+    ratio = difflib.SequenceMatcher(None, left_value, right_value).ratio()
+    ts = ratio * 100.0
     tset = ts
 
   # prefer token_set (handles partial overlaps) but keep token_sort influence

@@ -1,9 +1,66 @@
 -- DDL para la base de datos Oracle (Autonomous Database ATP)
--- Este script crea las tablas necesarias para almacenar productos y sus historiales de precios.
+-- Este script crea la estructura actual de la base de datos usada por el backend.
 
--- Opcional: Eliminar tablas existentes para recreación limpia en desarrollo
--- DROP TABLE historial_precios CASCADE CONSTRAINTS;
--- DROP TABLE productos CASCADE CONSTRAINTS;
+-- Elimina las tablas existentes para permitir recrear la estructura en limpio.
+BEGIN
+    EXECUTE IMMEDIATE 'DROP TABLE venta_detalle CASCADE CONSTRAINTS';
+EXCEPTION
+    WHEN OTHERS THEN
+        IF SQLCODE != -942 THEN
+            RAISE;
+        END IF;
+END;
+/
+
+BEGIN
+    EXECUTE IMMEDIATE 'DROP TABLE ventas CASCADE CONSTRAINTS';
+EXCEPTION
+    WHEN OTHERS THEN
+        IF SQLCODE != -942 THEN
+            RAISE;
+        END IF;
+END;
+/
+
+BEGIN
+    EXECUTE IMMEDIATE 'DROP TABLE competencia_mercado CASCADE CONSTRAINTS';
+EXCEPTION
+    WHEN OTHERS THEN
+        IF SQLCODE != -942 THEN
+            RAISE;
+        END IF;
+END;
+/
+
+BEGIN
+    EXECUTE IMMEDIATE 'DROP TABLE producto_vendedor CASCADE CONSTRAINTS';
+EXCEPTION
+    WHEN OTHERS THEN
+        IF SQLCODE != -942 THEN
+            RAISE;
+        END IF;
+END;
+/
+
+BEGIN
+    EXECUTE IMMEDIATE 'DROP TABLE vendedores CASCADE CONSTRAINTS';
+EXCEPTION
+    WHEN OTHERS THEN
+        IF SQLCODE != -942 THEN
+            RAISE;
+        END IF;
+END;
+/
+
+BEGIN
+    EXECUTE IMMEDIATE 'DROP TABLE usuarios CASCADE CONSTRAINTS';
+EXCEPTION
+    WHEN OTHERS THEN
+        IF SQLCODE != -942 THEN
+            RAISE;
+        END IF;
+END;
+/
 
 BEGIN
     EXECUTE IMMEDIATE 'DROP TABLE historial_precios CASCADE CONSTRAINTS';
@@ -25,57 +82,7 @@ EXCEPTION
 END;
 /
 
-BEGIN
-    EXECUTE IMMEDIATE 'DROP TABLE venta_detalle CASCADE CONSTRAINTS';
-EXCEPTION
-    WHEN OTHERS THEN
-        IF SQLCODE != -942 THEN
-            RAISE;
-        END IF;
-END;
-/ 
-
-BEGIN
-    EXECUTE IMMEDIATE 'DROP TABLE ventas CASCADE CONSTRAINTS';
-EXCEPTION
-    WHEN OTHERS THEN
-        IF SQLCODE != -942 THEN
-            RAISE;
-        END IF;
-END;
-/ 
-
-BEGIN
-    EXECUTE IMMEDIATE 'DROP TABLE competencia_mercado CASCADE CONSTRAINTS';
-EXCEPTION
-    WHEN OTHERS THEN
-        IF SQLCODE != -942 THEN
-            RAISE;
-        END IF;
-END;
-/ 
-
-BEGIN
-    EXECUTE IMMEDIATE 'DROP TABLE producto_vendedor CASCADE CONSTRAINTS';
-EXCEPTION
-    WHEN OTHERS THEN
-        IF SQLCODE != -942 THEN
-            RAISE;
-        END IF;
-END;
-/ 
-
-BEGIN
-    EXECUTE IMMEDIATE 'DROP TABLE vendedores CASCADE CONSTRAINTS';
-EXCEPTION
-    WHEN OTHERS THEN
-        IF SQLCODE != -942 THEN
-            RAISE;
-        END IF;
-END;
-/ 
-
--- Tabla PRODUCTOS (Datos Maestros del Producto)
+-- Tabla PRODUCTOS (Datos maestros de los productos)
 CREATE TABLE productos (
     id_producto         VARCHAR2(20) NOT NULL,
     nombre              VARCHAR2(1000) NOT NULL,
@@ -88,74 +95,26 @@ CREATE TABLE productos (
     imagen_url          CLOB,
     fecha_actualizacion TIMESTAMP DEFAULT CURRENT_TIMESTAMP NOT NULL,
     CONSTRAINT pk_productos PRIMARY KEY (id_producto),
-    CONSTRAINT chk_precio_actual CHECK (precio_actual >= 0)
-    ,CONSTRAINT chk_stock CHECK (stock >= 0)
-    ,CONSTRAINT chk_precio_fabricacion CHECK (precio_fabricacion >= 0)
+    CONSTRAINT chk_precio_actual CHECK (precio_actual >= 0),
+    CONSTRAINT chk_stock CHECK (stock >= 0),
+    CONSTRAINT chk_precio_fabricacion CHECK (precio_fabricacion >= 0)
 );
 
-COMMENT ON TABLE productos IS 'Tabla maestra para almacenar la informacion de los productos escaneados de Amazon.';
-COMMENT ON COLUMN productos.id_producto IS 'Identificador unico del producto (ASIN de Amazon).';
+COMMENT ON TABLE productos IS 'Tabla maestra para almacenar la informacion de los productos del sistema.';
+COMMENT ON COLUMN productos.id_producto IS 'Identificador unico del producto.';
 COMMENT ON COLUMN productos.nombre IS 'Nombre completo del producto.';
 COMMENT ON COLUMN productos.marca IS 'Marca o fabricante del producto.';
 COMMENT ON COLUMN productos.categoria IS 'Categoria del producto.';
-COMMENT ON COLUMN productos.precio_actual IS 'Ultimo precio registrado o actual del producto.';
+COMMENT ON COLUMN productos.precio_actual IS 'Precio de venta actual del producto.';
 COMMENT ON COLUMN productos.stock IS 'Cantidad disponible en inventario.';
 COMMENT ON COLUMN productos.precio_fabricacion IS 'Costo interno o precio de fabricacion.';
 COMMENT ON COLUMN productos.fecha_caducidad IS 'Fecha de caducidad del producto si aplica.';
-COMMENT ON COLUMN productos.imagen_url IS 'URL de la imagen del producto o data URL base64.';
-COMMENT ON COLUMN productos.fecha_actualizacion IS 'Fecha y hora del ultimo cambio o insercion de datos del producto.';
+COMMENT ON COLUMN productos.imagen_url IS 'URL o identificador de la imagen del producto.';
+COMMENT ON COLUMN productos.fecha_actualizacion IS 'Fecha y hora del ultimo cambio en el registro del producto.';
 
-BEGIN
-    EXECUTE IMMEDIATE 'ALTER TABLE productos ADD (marca VARCHAR2(150))';
-EXCEPTION
-    WHEN OTHERS THEN
-        IF SQLCODE != -1430 THEN
-            RAISE;
-        END IF;
-END;
+CREATE INDEX idx_productos_cat ON productos(categoria);
 
-BEGIN
-    EXECUTE IMMEDIATE 'ALTER TABLE productos ADD (imagen_url CLOB)';
-EXCEPTION
-    WHEN OTHERS THEN
-        IF SQLCODE != -1430 THEN
-            RAISE;
-        END IF;
-END;
-/
-/ 
-
-BEGIN
-    EXECUTE IMMEDIATE 'ALTER TABLE productos ADD (stock NUMBER(10) DEFAULT 0 NOT NULL)';
-EXCEPTION
-    WHEN OTHERS THEN
-        IF SQLCODE != -1430 THEN
-            RAISE;
-        END IF;
-END;
-/ 
-
-BEGIN
-    EXECUTE IMMEDIATE 'ALTER TABLE productos ADD (precio_fabricacion NUMBER(10, 2))';
-EXCEPTION
-    WHEN OTHERS THEN
-        IF SQLCODE != -1430 THEN
-            RAISE;
-        END IF;
-END;
-/ 
-
-BEGIN
-    EXECUTE IMMEDIATE 'ALTER TABLE productos ADD (fecha_caducidad DATE)';
-EXCEPTION
-    WHEN OTHERS THEN
-        IF SQLCODE != -1430 THEN
-            RAISE;
-        END IF;
-END;
-/ 
-
--- Tabla HISTORIAL_PRECIOS (Registro Historico Transaccional)
+-- Tabla HISTORIAL_PRECIOS (Registro historico de precios por producto)
 CREATE TABLE historial_precios (
     id_producto         VARCHAR2(20) NOT NULL,
     fecha               DATE NOT NULL,
@@ -167,48 +126,14 @@ CREATE TABLE historial_precios (
     CONSTRAINT chk_precio_registrado CHECK (precio_registrado >= 0)
 );
 
-COMMENT ON TABLE historial_precios IS 'Tabla que almacena la evolucion historica del precio por producto y por fecha.';
-COMMENT ON COLUMN historial_precios.id_producto IS 'Identificador del producto (ASIN), llave foranea a productos.';
-COMMENT ON COLUMN historial_precios.fecha IS 'Fecha del registro del precio.';
-COMMENT ON COLUMN historial_precios.precio_registrado IS 'Precio del producto en la fecha especificada.';
-
--- Indices de rendimiento para consultas rapidas
-BEGIN
-    EXECUTE IMMEDIATE 'DROP INDEX idx_historial_fecha';
-EXCEPTION
-    WHEN OTHERS THEN
-        IF SQLCODE != -1418 THEN
-            RAISE;
-        END IF;
-END;
-/
+COMMENT ON TABLE historial_precios IS 'Tabla que almacena la evolucion historica de precios por producto.';
+COMMENT ON COLUMN historial_precios.id_producto IS 'Producto asociado al registro historico.';
+COMMENT ON COLUMN historial_precios.fecha IS 'Fecha del registro de precio.';
+COMMENT ON COLUMN historial_precios.precio_registrado IS 'Precio registrado en esa fecha.';
 
 CREATE INDEX idx_historial_fecha ON historial_precios(fecha);
 
--- Indices de rendimiento para consultas rapidas
-BEGIN
-    EXECUTE IMMEDIATE 'DROP INDEX idx_productos_cat';
-EXCEPTION
-    WHEN OTHERS THEN
-        IF SQLCODE != -1418 THEN
-            RAISE;
-        END IF;
-END;
-/
-
-CREATE INDEX idx_productos_cat ON productos(categoria);
-
--- Tabla USUARIOS (Autenticacion y registro)
-BEGIN
-    EXECUTE IMMEDIATE 'DROP TABLE usuarios CASCADE CONSTRAINTS';
-EXCEPTION
-    WHEN OTHERS THEN
-        IF SQLCODE != -942 THEN
-            RAISE;
-        END IF;
-END;
-/
-
+-- Tabla USUARIOS (Autenticacion y roles)
 CREATE TABLE usuarios (
     id_usuario      VARCHAR2(36) NOT NULL,
     nombre          VARCHAR2(150) NOT NULL,
@@ -226,19 +151,9 @@ COMMENT ON TABLE usuarios IS 'Tabla para registro y autenticacion de usuarios.';
 COMMENT ON COLUMN usuarios.correo IS 'Correo unico del usuario.';
 COMMENT ON COLUMN usuarios.tipo_usuario IS 'Tipo de usuario: Vendedor o Cliente.';
 
-BEGIN
-    EXECUTE IMMEDIATE 'DROP INDEX idx_usuarios_tipo';
-EXCEPTION
-    WHEN OTHERS THEN
-        IF SQLCODE != -1418 THEN
-            RAISE;
-        END IF;
-END;
-/
-
 CREATE INDEX idx_usuarios_tipo ON usuarios(tipo_usuario);
 
--- Tabla VENDEDORES (perfil operativo del usuario vendedor)
+-- Tabla VENDEDORES (perfil comercial del vendedor)
 CREATE TABLE vendedores (
     id_vendedor         VARCHAR2(36) NOT NULL,
     codigo_vendedor     VARCHAR2(20) NOT NULL,
@@ -254,11 +169,11 @@ CREATE TABLE vendedores (
 
 COMMENT ON TABLE vendedores IS 'Perfil extendido para usuarios tipo vendedor.';
 
--- Distribucion de productos por vendedor
+-- Tabla PRODUCTO_VENDEDOR (asignacion de producto a vendedor)
 CREATE TABLE producto_vendedor (
     id_producto         VARCHAR2(20) NOT NULL,
     id_vendedor         VARCHAR2(36) NOT NULL,
-    fecha_asignacion     TIMESTAMP DEFAULT CURRENT_TIMESTAMP NOT NULL,
+    fecha_asignacion    TIMESTAMP DEFAULT CURRENT_TIMESTAMP NOT NULL,
     CONSTRAINT pk_producto_vendedor PRIMARY KEY (id_producto),
     CONSTRAINT fk_pv_producto FOREIGN KEY (id_producto)
         REFERENCES productos (id_producto)
@@ -270,7 +185,7 @@ CREATE TABLE producto_vendedor (
 
 CREATE INDEX idx_producto_vendedor_vendedor ON producto_vendedor(id_vendedor);
 
--- Señales de competencia para recomendaciones de venta
+-- Tabla COMPETENCIA_MERCADO (precios de competencia por producto)
 CREATE TABLE competencia_mercado (
     id_competencia              NUMBER GENERATED BY DEFAULT AS IDENTITY,
     id_producto                 VARCHAR2(20) NOT NULL,
@@ -286,7 +201,7 @@ CREATE TABLE competencia_mercado (
 
 CREATE INDEX idx_competencia_producto_fecha ON competencia_mercado(id_producto, fecha DESC);
 
--- Cabecera de ventas, sirve como ticket de venta
+-- Tabla VENTAS (cabecera de la compra)
 CREATE TABLE ventas (
     id_venta        VARCHAR2(36) NOT NULL,
     id_cliente      VARCHAR2(36) NOT NULL,
@@ -306,7 +221,7 @@ CREATE TABLE ventas (
 
 CREATE INDEX idx_ventas_cliente_fecha ON ventas(id_cliente, fecha_venta DESC);
 
--- Detalle de la venta por producto
+-- Tabla VENTA_DETALLE (detalle de productos por venta)
 CREATE TABLE venta_detalle (
     id_venta         VARCHAR2(36) NOT NULL,
     id_producto      VARCHAR2(20) NOT NULL,

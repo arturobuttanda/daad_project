@@ -387,8 +387,76 @@ class Venta:
     )
 
 
+def crear_venta_por_item(
+  cliente: Cliente | None,
+  vendedor: Vendedor | None,
+  id_venta: str,
+  id_producto: str,
+  nombre: str,
+  marca: str | None,
+  precio_actual: float | None,
+  stock_actual: int,
+  precio_fabricacion: float | None,
+  cantidad: int,
+  fecha_venta: date | datetime | None = None,
+) -> tuple[Venta, dict[str, object | None], int, float, float | None]:
+  """Construye el objeto Venta y el detalle de venta desde los datos del producto."""
+  if cantidad <= 0:
+    raise ValueError("La cantidad debe ser mayor que cero.")
+
+  producto = Producto(
+    id_producto=id_producto,
+    nombre=nombre,
+    marca=marca,
+    precio_venta_actual=precio_actual,
+    stock=stock_actual,
+    precio_fabricacion=precio_fabricacion,
+  )
+
+  if producto.stock < cantidad:
+    raise ValueError("No hay stock suficiente para completar la venta.")
+
+  producto.actualizar_stock(producto.stock - cantidad)
+  unit_price = float(precio_actual or 0.0)
+  subtotal = round(unit_price * cantidad, 2)
+  profit = None
+  if precio_fabricacion is not None:
+    profit = round((unit_price - float(precio_fabricacion)) * cantidad, 2)
+
+  if vendedor is not None:
+    venta = vendedor.vender_producto(
+      producto,
+      cantidad,
+      fecha_venta=fecha_venta,
+      total_pagado=subtotal,
+      id_venta=id_venta,
+    )
+  else:
+    venta = Venta.desde_detalle(
+      id_venta=id_venta,
+      producto=producto,
+      cantidad=cantidad,
+      fecha_venta=fecha_venta,
+      precio_unitario=unit_price,
+    )
+
+  if cliente is not None:
+    cliente.registrar_compra(venta)
+
+  detalle = {
+    "id_producto": id_producto,
+    "cantidad": cantidad,
+    "precio_unitario": unit_price,
+    "costo_unitario": float(precio_fabricacion) if precio_fabricacion is not None else None,
+    "subtotal": subtotal,
+    "margen_unitario": round(unit_price - float(precio_fabricacion), 2) if precio_fabricacion is not None else None,
+  }
+
+  return venta, detalle, producto.stock, subtotal, profit
+
+
 class Informe:
-  """Salida agregada para reportes financieros."""
+  """Salida agregada para reportes financieros e indicadores del sistema."""
 
   def __init__(
     self,
@@ -396,11 +464,55 @@ class Informe:
     costos_totales: float,
     margen_ganancia: float,
     alertas_stock_bajo: Sequence[Producto],
+    total_productos: int = 0,
+    total_vendedores: int = 0,
+    total_clientes: int = 0,
+    total_ventas: int = 0,
+    ticket_promedio: float = 0.0,
+    productos_stock_bajo: int = 0,
+    productos_estancados: int = 0,
   ):
     self.ingresos_totales = float(ingresos_totales)
     self.costos_totales = float(costos_totales)
     self.margen_ganancia = float(margen_ganancia)
     self.alertas_stock_bajo = list(alertas_stock_bajo)
+    self.total_productos = int(total_productos)
+    self.total_vendedores = int(total_vendedores)
+    self.total_clientes = int(total_clientes)
+    self.total_ventas = int(total_ventas)
+    self.ticket_promedio = float(ticket_promedio)
+    self.productos_stock_bajo = int(productos_stock_bajo)
+    self.productos_estancados = int(productos_estancados)
+
+  @classmethod
+  def from_db_aggregates(
+    cls,
+    ingresos_totales: float,
+    costos_totales: float,
+    alertas_stock_bajo: Sequence[Producto],
+    total_productos: int = 0,
+    total_vendedores: int = 0,
+    total_clientes: int = 0,
+    total_ventas: int = 0,
+    ticket_promedio: float = 0.0,
+    productos_stock_bajo: int = 0,
+    productos_estancados: int = 0,
+  ) -> "Informe":
+    """Construye un Informe directamente a partir de agregados de base de datos."""
+    margen = float(ingresos_totales) - float(costos_totales)
+    return cls(
+      ingresos_totales=ingresos_totales,
+      costos_totales=costos_totales,
+      margen_ganancia=margen,
+      alertas_stock_bajo=alertas_stock_bajo,
+      total_productos=total_productos,
+      total_vendedores=total_vendedores,
+      total_clientes=total_clientes,
+      total_ventas=total_ventas,
+      ticket_promedio=ticket_promedio,
+      productos_stock_bajo=productos_stock_bajo,
+      productos_estancados=productos_estancados,
+    )
 
   def to_dict(self) -> dict[str, object | None]:
     return {
@@ -408,6 +520,13 @@ class Informe:
       "costos_totales": self.costos_totales,
       "margen_ganancia": self.margen_ganancia,
       "alertas_stock_bajo": [producto.to_dict() for producto in self.alertas_stock_bajo],
+      "total_productos": self.total_productos,
+      "total_vendedores": self.total_vendedores,
+      "total_clientes": self.total_clientes,
+      "total_ventas": self.total_ventas,
+      "ticket_promedio": round(self.ticket_promedio, 2),
+      "productos_stock_bajo": self.productos_stock_bajo,
+      "productos_estancados": self.productos_estancados,
     }
 
 
@@ -613,6 +732,12 @@ class Cliente(Persona):
   def registrar_compra(self, venta: Venta) -> None:
     self.historial_compras.append(venta)
 
+  def to_row(self) -> dict[str, object | None]:
+    """Serializa el cliente incluyendo su presupuesto maximo."""
+    base = super().to_row()
+    base["presupuesto_maximo"] = self.presupuesto_maximo
+    return base
+
 
 class Vendedor(Persona):
   """Rol operativo con acceso a inventario y precios."""
@@ -679,6 +804,11 @@ class Vendedor(Persona):
   def quitar_producto(self, producto: Producto) -> None:
     self.productos_asignados = [item for item in self.productos_asignados if item.id_producto != producto.id_producto]
 
+  def eliminar_producto(self, producto: Producto) -> None:
+    if not any(item.id_producto == producto.id_producto for item in self.productos_asignados):
+      raise ValueError("El producto no está asignado a este vendedor.")
+    self.quitar_producto(producto)
+
   def generar_informe_financiero(self) -> Informe:
     ingresos_totales = 0.0
     costos_totales = 0.0
@@ -703,6 +833,58 @@ class Vendedor(Persona):
       if producto.fecha_caducidad and producto.fecha_caducidad <= date.today():
         productos_con_alerta.append(producto)
     return productos_con_alerta
+
+  def agregar_producto(self, producto: Producto) -> None:
+    """Agrega un producto a los asignados si todavia no esta en la lista."""
+    if not any(p.id_producto == producto.id_producto for p in self.productos_asignados):
+      self.productos_asignados.append(producto)
+
+  def to_row(self) -> dict[str, object | None]:
+    """Serializa el vendedor incluyendo campos propios de la tabla vendedores."""
+    base = super().to_row()
+    base.update({
+      "id_vendedor": self.id_vendedor,
+      "codigo_vendedor": self.codigo_vendedor,
+      "especialidad": self.especialidad or None,
+      "objetivo_ventas": self.objetivo_ventas,
+    })
+    return base
+
+  def to_vendor_dict(self) -> dict[str, object | None]:
+    """Diccionario publico con datos del vendedor para respuestas de API."""
+    return {
+      "id_vendedor": self.id_vendedor,
+      "nombre_vendedor": self.nombre,
+      "codigo_vendedor": self.codigo_vendedor,
+      "especialidad": self.especialidad or None,
+    }
+
+  @classmethod
+  def desde_fila_vendedor(
+    cls,
+    fila_usuario: Sequence[object],
+    codigo_vendedor: str | None = None,
+    especialidad: str | None = None,
+    objetivo_ventas: float | None = None,
+    password_hash: str | None = None,
+  ) -> "Vendedor":
+    """Construye un Vendedor a partir de una fila de la tabla usuarios
+    mas datos opcionales de la tabla vendedores."""
+    id_usuario = str(fila_usuario[0])
+    nombre = str(fila_usuario[1])
+    telefono = fila_usuario[2] if len(fila_usuario) > 2 else None
+    correo = str(fila_usuario[3]) if len(fila_usuario) > 3 else ""
+    return cls(
+      id_persona=id_usuario,
+      nombre=nombre,
+      telefono=telefono,
+      correo=correo,
+      id_vendedor=id_usuario,
+      codigo_vendedor=codigo_vendedor or id_usuario,
+      especialidad=especialidad,
+      objetivo_ventas=objetivo_ventas,
+      password_hash=password_hash,
+    )
 
 
 def crear_usuario_desde_fila_usuario(

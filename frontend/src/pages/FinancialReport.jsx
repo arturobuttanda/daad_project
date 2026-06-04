@@ -203,7 +203,7 @@ export default function FinancialReport() {
               className="primary-button mt-4 w-full"
               onClick={() => {
                 const apiBase = import.meta.env.VITE_API_URL || "http://localhost:8000";
-                const url = `${apiBase}/api/reportes/ventas/csv?period=30d`;
+                const url = `${apiBase}/api/vendedor/reportes/ventas/csv?period=30d`;
                 addNotification({
                   kind: "csv-download",
                   title: "Reporte CSV descargado",
