@@ -37,8 +37,7 @@ _project_root = Path(__file__).resolve().parents[2]
 load_dotenv(_project_root / ".env")
 
 
-def _find_wallet_dir() -> str | None:
-    """Busca automáticamente la wallet en wallet/<subcarpeta>/tnsnames.ora."""
+def _buscar_wallet_dir() -> str | None:
     wallet_root = _project_root / "wallet"
     if wallet_root.is_dir():
         for child in sorted(wallet_root.iterdir()):
@@ -53,7 +52,7 @@ def _find_wallet_dir() -> str | None:
 DB_USER = os.environ["DB_USER"]
 DB_PASSWORD = os.environ["DB_PASSWORD"]
 DB_DSN = os.environ["DB_DSN"]
-WALLET_LOCATION = os.environ.get("WALLET_LOCATION") or _find_wallet_dir()
+WALLET_LOCATION = os.environ.get("WALLET_LOCATION") or _buscar_wallet_dir()
 if not WALLET_LOCATION:
     raise RuntimeError(
         "WALLET_LOCATION no definido. "
@@ -100,7 +99,7 @@ WHEN NOT MATCHED THEN
   VALUES (:id_producto, :fecha, :precio_registrado)
 """
 
-def get_connection_string_from_tnsnames(tnsnames_path, dsn_name):
+def obtener_cadena_conexion_desde_tnsnames(tnsnames_path, dsn_name):
     """
     Parsea tnsnames.ora para extraer la descripción de conexión (connection string)
     asociada al dsn_name, ignorando comentarios.
@@ -149,12 +148,12 @@ def get_connection_string_from_tnsnames(tnsnames_path, dsn_name):
         logger.error(f"Error al parsear tnsnames.ora: {e}")
         return None
 
-def test_connection():
+def probar_conexion():
     """Valida la conectividad a la base de datos."""
     logger.info("Probando conexion con Oracle Cloud (Thin Mode)...")
     try:
         tns_path = os.path.join(WALLET_LOCATION, "tnsnames.ora")
-        connection_string = get_connection_string_from_tnsnames(tns_path, DB_DSN)
+        connection_string = obtener_cadena_conexion_desde_tnsnames(tns_path, DB_DSN)
         
         if connection_string:
             logger.info(f"DSN '{DB_DSN}' resuelto exitosamente desde tnsnames.ora.")
@@ -183,7 +182,7 @@ def test_connection():
         logger.error(f"Error al conectar a la base de datos: {e}")
         return False
 
-def forward_fill_daily(observed_prices):
+def rellenar_huecos_diarios(observed_prices):
     """
     Dado un dict {date: precio} con observaciones esporádicas,
     genera un registro por cada día calendario entre la primera y la última
@@ -210,7 +209,7 @@ def forward_fill_daily(observed_prices):
 
     return daily_prices
 
-def load_and_clean_data(json_path):
+def cargar_y_limpiar_datos(json_path):
     """
     Lee el JSON, limpia los datos, y genera registros DIARIOS de precios
     mediante forward-fill (el último precio conocido se mantiene hasta
@@ -259,7 +258,7 @@ def load_and_clean_data(json_path):
     # Generar registros diarios con forward-fill
     historial_data = {}
     for id_prod, observed in observaciones_por_producto.items():
-        daily = forward_fill_daily(observed)
+        daily = rellenar_huecos_diarios(observed)
         for fecha_dt, precio in daily.items():
             historial_data[(id_prod, fecha_dt)] = precio
         logger.info(f"Producto {id_prod}: {len(daily)} registros diarios generados (forward-fill).")
@@ -278,7 +277,7 @@ def load_and_clean_data(json_path):
     logger.info(f"Datos procesados: {len(list_productos)} productos, {len(list_historial)} registros diarios totales.")
     return list_productos, list_historial
 
-def execute_batch(cursor, sql, data_list, batch_name):
+def ejecutar_lotes(cursor, sql, data_list, batch_name):
     """Ejecuta inserciones por lotes de forma eficiente."""
     total_records = len(data_list)
     if total_records == 0:
@@ -297,11 +296,11 @@ def execute_batch(cursor, sql, data_list, batch_name):
             logger.error(f"Error procesando lote {i // BATCH_SIZE + 1} para {batch_name}: {e}")
             raise e
 
-def run_pipeline(json_path):
-    """Ejecuta el pipeline completo de ETL hacia Oracle Cloud."""
+def ejecutar_proceso_etl(json_path):
+    """Ejecuta el proceso completo de ETL hacia Oracle Cloud."""
     try:
         # 1. Cargar y limpiar datos
-        productos, historial = load_and_clean_data(json_path)
+        productos, historial = cargar_y_limpiar_datos(json_path)
     except Exception as e:
         logger.error(f"Error al leer/procesar archivo JSON: {e}")
         return
@@ -311,7 +310,7 @@ def run_pipeline(json_path):
     try:
         logger.info("Estableciendo conexion con Oracle Cloud (Thin Mode)...")
         tns_path = os.path.join(WALLET_LOCATION, "tnsnames.ora")
-        connection_string = get_connection_string_from_tnsnames(tns_path, DB_DSN)
+        connection_string = obtener_cadena_conexion_desde_tnsnames(tns_path, DB_DSN)
         
         if connection_string:
             logger.info(f"DSN '{DB_DSN}' resuelto exitosamente desde tnsnames.ora.")
@@ -338,10 +337,10 @@ def run_pipeline(json_path):
         cursor = connection.cursor()
 
         # Insertar productos primero (para respetar integridad de llave foranea)
-        execute_batch(cursor, SQL_MERGE_PRODUCTOS, productos, "PRODUCTOS")
+        ejecutar_lotes(cursor, SQL_MERGE_PRODUCTOS, productos, "PRODUCTOS")
 
         # Insertar historial de precios despues
-        execute_batch(cursor, SQL_MERGE_HISTORIAL, historial, "HISTORIAL_PRECIOS")
+        ejecutar_lotes(cursor, SQL_MERGE_HISTORIAL, historial, "HISTORIAL_PRECIOS")
 
         # Confirmar transaccion
         connection.commit()
@@ -372,6 +371,6 @@ if __name__ == "__main__":
     args = parser.parse_args()
 
     if args.test:
-        test_connection()
+        probar_conexion()
     else:
-        run_pipeline(args.json)
+        ejecutar_proceso_etl(args.json)

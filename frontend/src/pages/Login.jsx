@@ -1,12 +1,12 @@
 import { useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import toast from "react-hot-toast";
-import AuthNavbar from "../components/AuthNavbar.jsx";
-import { notifyAuthChange } from "../utils/authEvents.js";
+import BarraAutenticacion from "../components/AuthNavbar.jsx";
+import { notificar_cambio_autenticacion } from "../utils/authEvents.js";
 
 const API_URL = import.meta.env.VITE_API_URL || "http://localhost:8000";
 
-export default function Login() {
+export default function IniciarSesion() {
   const navigate = useNavigate();
   const [showPassword, setShowPassword] = useState(false);
   const [selectedPortal, setSelectedPortal] = useState("Cliente");
@@ -20,7 +20,7 @@ export default function Login() {
   const isPasswordValid = formValues.contrasena.trim().length > 0;
   const isFormValid = isEmailValid && isPasswordValid;
 
-  const handleChange = (event) => {
+  const manejar_cambio = (event) => {
     const { name, value } = event.target;
     setFormValues((current) => ({
       ...current,
@@ -28,7 +28,7 @@ export default function Login() {
     }));
   };
 
-  const handleSubmit = async (event) => {
+  const manejar_envio = async (event) => {
     event.preventDefault();
     if (!isFormValid || isSubmitting) {
       return;
@@ -54,7 +54,7 @@ export default function Login() {
       localStorage.setItem("userType", data.tipo_usuario);
       localStorage.setItem("userName", data.nombre);
       localStorage.setItem("userId", data.id);
-      notifyAuthChange();
+      notificar_cambio_autenticacion();
       toast.success(`Sesion iniciada. Bienvenido, ${data.nombre}.`);
       if (data.tipo_usuario === "Vendedor") {
         navigate("/vendedor");
@@ -73,7 +73,7 @@ export default function Login() {
   return (
     <div className="page-wrap min-h-screen py-8 sm:py-10">
       <div className="mx-auto mb-8 max-w-4xl">
-        <AuthNavbar title="Tu portal comercial inteligente" />
+        <BarraAutenticacion title="Tu portal comercial inteligente" />
       </div>
 
       <div className="mx-auto flex max-w-4xl justify-center">
@@ -100,18 +100,18 @@ export default function Login() {
             <div className="mt-6 rounded-xl border border-[#CFD8EA] bg-[#F8FAFF] p-1">
               <div className="grid grid-cols-2 gap-1 text-sm font-semibold text-slate-600">
                 <div className="rounded-lg border border-[#C7D2FE] bg-white px-4 py-2.5 text-center text-ocean">
-                  Login
+                  Iniciar sesión
                 </div>
                 <Link
                   to="/registro"
                   className="rounded-lg border border-transparent px-4 py-2.5 text-center transition hover:border-[#C7D2FE] hover:bg-white hover:text-ocean"
                 >
-                  Sign Up
+                  Registrarse
                 </Link>
               </div>
             </div>
 
-          <form className="mt-6 space-y-4" onSubmit={handleSubmit}>
+          <form className="mt-6 space-y-4" onSubmit={manejar_envio}>
             <div>
               <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">
                 Elige tu tipo de cuenta
@@ -157,7 +157,7 @@ export default function Login() {
                 name="correo"
                 maxLength={100}
                 value={formValues.correo}
-                onChange={handleChange}
+                onChange={manejar_cambio}
               />
             </div>
             <div>
@@ -172,7 +172,7 @@ export default function Login() {
                   name="contrasena"
                   maxLength={100}
                   value={formValues.contrasena}
-                  onChange={handleChange}
+                  onChange={manejar_cambio}
                 />
                 <button
                   type="button"
@@ -204,7 +204,7 @@ export default function Login() {
               className="primary-button w-full rounded-xl py-3.5 text-base disabled:cursor-not-allowed disabled:opacity-60"
               disabled={!isFormValid || isSubmitting}
             >
-              {isSubmitting ? "Ingresando..." : "Sign In"}
+              {isSubmitting ? "Ingresando..." : "Iniciar sesión"}
             </button>
           </form>
           <div className="mt-6 flex flex-wrap items-center justify-between gap-3 text-xs text-slate-600">

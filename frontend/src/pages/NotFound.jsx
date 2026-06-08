@@ -1,6 +1,6 @@
 import { Link } from "react-router-dom";
 
-export default function NotFound() {
+export default function PaginaNoEncontrada() {
   return (
     <div className="page-wrap min-h-screen py-12">
       <div className="flex w-full flex-col items-center justify-center gap-6 text-center">
@@ -12,7 +12,7 @@ export default function NotFound() {
           La ruta no existe. Puedes volver al inicio y continuar con el flujo.
         </p>
         <Link to="/login" className="primary-button">
-          Volver al login
+          Volver a iniciar sesión
         </Link>
       </div>
     </div>

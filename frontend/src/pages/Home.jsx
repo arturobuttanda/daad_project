@@ -1,6 +1,6 @@
 import { Link } from "react-router-dom";
-import UserNavbar from "../components/UserNavbar.jsx";
-import { notifyAuthChange } from "../utils/authEvents.js";
+import BarraUsuario from "../components/UserNavbar.jsx";
+import { notificar_cambio_autenticacion } from "../utils/authEvents.js";
 
 const sidebarItems = [
   {
@@ -53,15 +53,15 @@ export default function Home() {
     localStorage.removeItem("userType");
     localStorage.removeItem("userName");
     localStorage.removeItem("userId");
-    notifyAuthChange();
+    notificar_cambio_autenticacion();
   };
 
   return (
     <div className="min-h-screen">
       <div className="page-wrap py-8">
         {userName ? (
-          <div className="mb-6">
-            <UserNavbar
+            <div className="mb-6">
+            <BarraUsuario
               userName={userName}
               onLogout={handleLogout}
               homeLabel={homeLabel}
@@ -76,7 +76,7 @@ export default function Home() {
             </div>
             <div className="flex items-center gap-3">
               <Link to="/login" className="secondary-button">
-                Iniciar sesion
+                Iniciar sesión
               </Link>
               <Link to="/registro" className="primary-button">
                 Registro

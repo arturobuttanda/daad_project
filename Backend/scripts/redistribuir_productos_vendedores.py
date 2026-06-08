@@ -38,7 +38,7 @@ if not wallet_location.is_absolute():
 pwd_context = CryptContext(schemes=["pbkdf2_sha256"], deprecated="auto")
 OUTPUT_TXT = ROOT_DIR / "vendedores_demo.txt"
 
-FIRST_NAMES = [
+NOMBRES = [
     "Alberto",
     "Andrea",
     "Brenda",
@@ -57,7 +57,7 @@ FIRST_NAMES = [
     "Nicolas",
 ]
 
-LAST_NAMES = [
+APELLIDOS = [
     "Aguilar",
     "Campos",
     "Cortes",
@@ -76,11 +76,11 @@ LAST_NAMES = [
     "Zavala",
 ]
 
-SPECIALTIES = ["Bebidas", "Despensa", "Tecnologia", "Hogar", "Belleza", "Limpieza", "Farmacia", "Accesorios"]
+ESPECIALIDADES = ["Bebidas", "Despensa", "Tecnologia", "Hogar", "Belleza", "Limpieza", "Farmacia", "Accesorios"]
 
 
 @dataclass(frozen=True)
-class VendorAccount:
+class CuentaVendedor:
     id_usuario: str
     nombre: str
     telefono: str
@@ -91,7 +91,7 @@ class VendorAccount:
     objetivo_ventas: float
 
 
-def get_connection():
+def obtener_conexion():
     return oracledb.connect(
         user=DB_USER,
         password=DB_PASSWORD,
@@ -102,25 +102,25 @@ def get_connection():
     )
 
 
-def make_vendor_accounts(count: int = 10) -> list[VendorAccount]:
+def generar_cuentas_vendedores(count: int = 10) -> list[CuentaVendedor]:
     rng = random.Random(20260525)
-    accounts: list[VendorAccount] = []
+    accounts: list[CuentaVendedor] = []
 
     for index in range(1, count + 1):
-        first_name = rng.choice(FIRST_NAMES)
-        last_name = rng.choice(LAST_NAMES)
-        second_last_name = rng.choice(LAST_NAMES)
+        first_name = rng.choice(NOMBRES)
+        last_name = rng.choice(APELLIDOS)
+        second_last_name = rng.choice(APELLIDOS)
         nombre = f"{first_name} {last_name} {second_last_name}"
         correo = f"vendedor_demo_{index:02d}@demo.local"
         contrasena = f"Vnd-{index:02d}-{secrets.token_hex(4)}"
         telefono = f"55{rng.randint(10000000, 99999999)}"
         codigo_vendedor = f"V-{3000 + index}"
-        especialidad = rng.choice(SPECIALTIES)
+        especialidad = rng.choice(ESPECIALIDADES)
         objetivo_ventas = float(rng.randint(80000, 220000))
         id_usuario = str(uuid.uuid5(uuid.NAMESPACE_URL, correo))
 
         accounts.append(
-            VendorAccount(
+            CuentaVendedor(
                 id_usuario=id_usuario,
                 nombre=nombre,
                 telefono=telefono,
@@ -135,12 +135,12 @@ def make_vendor_accounts(count: int = 10) -> list[VendorAccount]:
     return accounts
 
 
-def fetch_products(cursor):
+def obtener_productos(cursor):
     cursor.execute("SELECT id_producto FROM productos ORDER BY nombre, id_producto")
     return [row[0] for row in cursor.fetchall()]
 
 
-def upsert_vendors(cursor, accounts: list[VendorAccount]) -> tuple[list[tuple[str, str, str]], list[str]]:
+def insertar_o_actualizar_vendedores(cursor, accounts: list[CuentaVendedor]) -> tuple[list[tuple[str, str, str]], list[str]]:
     credentials_rows: list[tuple[str, str, str]] = []
     vendor_ids: list[str] = []
 
@@ -213,9 +213,9 @@ def upsert_vendors(cursor, accounts: list[VendorAccount]) -> tuple[list[tuple[st
     return credentials_rows, vendor_ids
 
 
-def assign_products(cursor, vendor_ids: list[str]) -> int:
+def asignar_productos(cursor, vendor_ids: list[str]) -> int:
     cursor.execute("DELETE FROM producto_vendedor")
-    product_ids = fetch_products(cursor)
+    product_ids = obtener_productos(cursor)
     if not product_ids or not vendor_ids:
         return 0
 
@@ -229,23 +229,23 @@ def assign_products(cursor, vendor_ids: list[str]) -> int:
     return len(product_ids)
 
 
-def write_credentials_file(rows: list[tuple[str, str, str]]) -> None:
+def escribir_archivo_credenciales(rows: list[tuple[str, str, str]]) -> None:
     with OUTPUT_TXT.open("w", encoding="utf-8") as file_handle:
         file_handle.write("nombre\tcorreo\tcontrasena\n")
         for nombre, correo, contrasena in rows:
             file_handle.write(f"{nombre}\t{correo}\t{contrasena}\n")
 
 
-def main() -> None:
-    accounts = make_vendor_accounts(10)
+def principal() -> None:
+    accounts = generar_cuentas_vendedores(10)
 
-    with get_connection() as connection:
+    with obtener_conexion() as connection:
         with connection.cursor() as cursor:
-            credentials_rows, vendor_ids = upsert_vendors(cursor, accounts)
-            assigned = assign_products(cursor, vendor_ids)
+            credentials_rows, vendor_ids = insertar_o_actualizar_vendedores(cursor, accounts)
+            assigned = asignar_productos(cursor, vendor_ids)
         connection.commit()
 
-    write_credentials_file(credentials_rows)
+    escribir_archivo_credenciales(credentials_rows)
     print(
         "Redistribucion completada: "
         f"10 vendedores listos, {assigned} productos repartidos y credenciales guardadas en {OUTPUT_TXT}."
@@ -253,4 +253,4 @@ def main() -> None:
 
 
 if __name__ == "__main__":
-    main()
+    principal()

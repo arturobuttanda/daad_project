@@ -1,6 +1,6 @@
 const API_URL = import.meta.env.VITE_API_URL || "http://localhost:8000";
 
-export async function updateUserProfile({ userId, userName, password }) {
+export async function actualizar_perfil_usuario({ userId, userName, password }) {
   const payload = {
     id_usuario: userId,
   };

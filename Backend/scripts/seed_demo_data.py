@@ -37,7 +37,7 @@ if not wallet_location.is_absolute():
 pwd_context = CryptContext(schemes=["pbkdf2_sha256"], deprecated="auto")
 
 
-def get_connection():
+def obtener_conexion():
     return oracledb.connect(
         user=DB_USER,
         password=DB_PASSWORD,
@@ -48,7 +48,7 @@ def get_connection():
     )
 
 
-def fetch_products(cursor):
+def obtener_productos(cursor):
     cursor.execute(
         "SELECT column_name FROM user_tab_columns WHERE table_name = 'PRODUCTOS'"
     )
@@ -67,21 +67,21 @@ def fetch_products(cursor):
     return [dict(zip(select_columns, row)) for row in rows]
 
 
-def fetch_vendors(cursor):
+def obtener_vendedores(cursor):
     cursor.execute(
         "SELECT v.id_vendedor, u.nombre, v.codigo_vendedor FROM vendedores v JOIN usuarios u ON u.id_usuario = v.id_vendedor ORDER BY v.codigo_vendedor"
     )
     return cursor.fetchall()
 
 
-def fetch_clients(cursor):
+def obtener_clientes(cursor):
     cursor.execute(
         "SELECT id_usuario, nombre FROM usuarios WHERE tipo_usuario = 'Cliente' ORDER BY nombre"
     )
     return cursor.fetchall()
 
 
-def execute_ddl(cursor, statement: str):
+def ejecutar_ddl(cursor, statement: str):
     cursor.execute(
         f"""
         BEGIN
@@ -96,8 +96,8 @@ def execute_ddl(cursor, statement: str):
     )
 
 
-def ensure_client_tables(cursor):
-    execute_ddl(
+def asegurar_tablas_cliente(cursor):
+    ejecutar_ddl(
         cursor,
         """
         CREATE TABLE vendedores (
@@ -114,7 +114,7 @@ def ensure_client_tables(cursor):
         )
         """,
     )
-    execute_ddl(
+    ejecutar_ddl(
         cursor,
         """
         CREATE TABLE producto_vendedor (
@@ -131,7 +131,7 @@ def ensure_client_tables(cursor):
         )
         """,
     )
-    execute_ddl(
+    ejecutar_ddl(
         cursor,
         """
         CREATE TABLE competencia_mercado (
@@ -194,7 +194,7 @@ def ensure_client_tables(cursor):
     )
 
 
-def ensure_product_columns(cursor):
+def asegurar_columnas_producto(cursor):
     for statement in [
         "ALTER TABLE productos ADD (marca VARCHAR2(150))",
         "ALTER TABLE productos ADD (stock NUMBER(10) DEFAULT 0 NOT NULL)",
@@ -215,8 +215,8 @@ def ensure_product_columns(cursor):
         )
 
 
-def backfill_inventory(cursor):
-    products = fetch_products(cursor)
+def rellenar_inventario(cursor):
+    products = obtener_productos(cursor)
     for product in products:
         stock_value = int(product.get("stock") or 0)
         price_value = float(product.get("precio_actual") or 0)
@@ -240,7 +240,7 @@ def backfill_inventory(cursor):
         )
 
 
-def ensure_users(cursor, prefix: str, count: int, tipo_usuario: str, name_prefix: str):
+def asegurar_usuarios(cursor, prefix: str, count: int, tipo_usuario: str, name_prefix: str):
     existing_ids = set()
     cursor.execute(
         "SELECT correo FROM usuarios WHERE correo LIKE :pattern",
@@ -271,7 +271,7 @@ def ensure_users(cursor, prefix: str, count: int, tipo_usuario: str, name_prefix
     return generated
 
 
-def ensure_vendors(cursor, vendor_rows):
+def asegurar_vendedores(cursor, vendor_rows):
     existing = set()
     cursor.execute("SELECT id_vendedor FROM vendedores")
     for (id_vendedor,) in cursor.fetchall():
@@ -292,9 +292,9 @@ def ensure_vendors(cursor, vendor_rows):
         )
 
 
-def assign_products_to_vendors(cursor, vendor_rows):
+def asignar_productos_a_vendedores(cursor, vendor_rows):
     cursor.execute("DELETE FROM producto_vendedor")
-    products = fetch_products(cursor)
+    products = obtener_productos(cursor)
     if not products or not vendor_rows:
         return 0
 
@@ -309,7 +309,7 @@ def assign_products_to_vendors(cursor, vendor_rows):
     return assigned
 
 
-def seed_competition(cursor):
+def poblar_competencia(cursor):
     cursor.execute("SELECT COUNT(*) FROM competencia_mercado")
     if int(cursor.fetchone()[0] or 0) > 0:
         return 0
@@ -335,12 +335,12 @@ def seed_competition(cursor):
     return total
 
 
-def seed_sales(cursor, client_rows):
+def generar_ventas_demo(cursor, client_rows):
     cursor.execute("SELECT COUNT(*) FROM ventas")
     if int(cursor.fetchone()[0] or 0) > 0:
         return 0
 
-    products = [product for product in fetch_products(cursor) if int(product.get("stock") or 0) > 5]
+    products = [product for product in obtener_productos(cursor) if int(product.get("stock") or 0) > 5]
     if not products:
         return 0
 
@@ -412,20 +412,20 @@ def seed_sales(cursor, client_rows):
     return created_sales
 
 
-def main():
-    with get_connection() as connection:
+def principal():
+    with obtener_conexion() as connection:
         with connection.cursor() as cursor:
-            ensure_product_columns(cursor)
-            ensure_client_tables(cursor)
-            backfill_inventory(cursor)
-            vendor_rows = ensure_users(cursor, "vendedor_demo_", 16, "Vendedor", "Vendedor Demo")
-            client_rows = ensure_users(cursor, "cliente_demo_", 10, "Cliente", "Cliente Demo")
-            ensure_vendors(cursor, vendor_rows)
-            all_vendors = fetch_vendors(cursor)
-            all_clients = fetch_clients(cursor)
-            assigned = assign_products_to_vendors(cursor, all_vendors)
-            competition_rows = seed_competition(cursor)
-            sales_created = seed_sales(cursor, all_clients)
+            asegurar_columnas_producto(cursor)
+            asegurar_tablas_cliente(cursor)
+            rellenar_inventario(cursor)
+            vendor_rows = asegurar_usuarios(cursor, "vendedor_demo_", 16, "Vendedor", "Vendedor Demo")
+            client_rows = asegurar_usuarios(cursor, "cliente_demo_", 10, "Cliente", "Cliente Demo")
+            asegurar_vendedores(cursor, vendor_rows)
+            all_vendors = obtener_vendedores(cursor)
+            all_clients = obtener_clientes(cursor)
+            assigned = asignar_productos_a_vendedores(cursor, all_vendors)
+            competition_rows = poblar_competencia(cursor)
+            sales_created = generar_ventas_demo(cursor, all_clients)
             connection.commit()
 
     print(
@@ -439,4 +439,4 @@ def main():
 
 
 if __name__ == "__main__":
-    main()
+    principal()

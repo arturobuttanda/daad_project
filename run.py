@@ -13,7 +13,7 @@ ROOT = Path(__file__).resolve().parent
 VENV_DIR = ROOT / ".venv"
 
 
-def get_venv_python() -> Path:
+def obtener_python_venv() -> Path:
     if platform.system() == "Windows":
         return VENV_DIR / "Scripts" / "python.exe"
     return VENV_DIR / "bin" / "python"
@@ -25,7 +25,7 @@ def ensure_venv() -> Path:
         venv.create(VENV_DIR, with_pip=True)
     else:
         print("Entorno virtual encontrado (.venv)")
-    python_path = get_venv_python()
+    python_path = obtener_python_venv()
     if not python_path.exists():
         raise RuntimeError(f"No se encontró el intérprete de Python en {python_path}")
     return python_path

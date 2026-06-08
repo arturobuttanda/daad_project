@@ -1,18 +1,18 @@
 import { useEffect, useState } from "react";
 import { BrowserRouter, Navigate, Route, Routes } from "react-router-dom";
-import Home from "./pages/Home.jsx";
-import Login from "./pages/Login.jsx";
-import Register from "./pages/Register.jsx";
-import VendorDashboard from "./pages/VendorDashboard.jsx";
-import FinancialReport from "./pages/FinancialReport.jsx";
-import ClientDashboard from "./pages/ClientDashboard.jsx";
-import ClientProductDetail from "./pages/ClientProductDetail.jsx";
-import ClientHistory from "./pages/ClientHistory.jsx";
-import NotFound from "./pages/NotFound.jsx";
+import Inicio from "./pages/Home.jsx";
+import IniciarSesion from "./pages/Login.jsx";
+import Registro from "./pages/Register.jsx";
+import PanelVendedor from "./pages/PanelVendedor.jsx";
+import ReporteFinanciero from "./pages/ReporteFinanciero.jsx";
+import PanelCliente from "./pages/PanelCliente.jsx";
+import DetalleProductoCliente from "./pages/DetalleProductoCliente.jsx";
+import HistorialCliente from "./pages/HistorialCliente.jsx";
+import PaginaNoEncontrada from "./pages/NotFound.jsx";
 import { Toaster } from "react-hot-toast";
-import { AUTH_CHANGE_EVENT } from "./utils/authEvents.js";
+import { EVENTO_CAMBIO_AUTENTICACION } from "./utils/authEvents.js";
 
-function readAuthSnapshot() {
+function leer_snapshot_autenticacion() {
   return {
     isRegistered: localStorage.getItem("isRegistered") === "true",
     userType: localStorage.getItem("userType"),
@@ -20,19 +20,19 @@ function readAuthSnapshot() {
 }
 
 export default function App() {
-  const [authState, setAuthState] = useState(readAuthSnapshot);
+  const [authState, setAuthState] = useState(leer_snapshot_autenticacion);
 
   useEffect(() => {
-    const syncAuthState = () => {
-      setAuthState(readAuthSnapshot());
+    const sincronizar_estado_autenticacion = () => {
+      setAuthState(leer_snapshot_autenticacion());
     };
 
-    window.addEventListener("storage", syncAuthState);
-    window.addEventListener(AUTH_CHANGE_EVENT, syncAuthState);
+    window.addEventListener("storage", sincronizar_estado_autenticacion);
+    window.addEventListener(EVENTO_CAMBIO_AUTENTICACION, sincronizar_estado_autenticacion);
 
     return () => {
-      window.removeEventListener("storage", syncAuthState);
-      window.removeEventListener(AUTH_CHANGE_EVENT, syncAuthState);
+      window.removeEventListener("storage", sincronizar_estado_autenticacion);
+      window.removeEventListener(EVENTO_CAMBIO_AUTENTICACION, sincronizar_estado_autenticacion);
     };
   }, []);
 
@@ -78,14 +78,14 @@ export default function App() {
         }}
       />
       <Routes>
-        <Route path="/" element={<Home />} />
-        <Route path="/login" element={<Login />} />
-        <Route path="/registro" element={<Register />} />
+        <Route path="/" element={<Inicio />} />
+        <Route path="/login" element={<IniciarSesion />} />
+        <Route path="/registro" element={<Registro />} />
         <Route
           path="/vendedor"
           element={
             <RequireVendor>
-              <VendorDashboard />
+              <PanelVendedor />
             </RequireVendor>
           }
         />
@@ -93,7 +93,7 @@ export default function App() {
           path="/vendedor/reporte"
           element={
             <RequireVendor>
-              <FinancialReport />
+              <ReporteFinanciero />
             </RequireVendor>
           }
         />
@@ -101,7 +101,7 @@ export default function App() {
           path="/cliente"
           element={
             <RequireClient>
-              <ClientDashboard />
+              <PanelCliente />
             </RequireClient>
           }
         />
@@ -109,7 +109,7 @@ export default function App() {
           path="/cliente/producto/:productId"
           element={
             <RequireClient>
-              <ClientProductDetail />
+              <DetalleProductoCliente />
             </RequireClient>
           }
         />
@@ -117,14 +117,14 @@ export default function App() {
           path="/cliente/historial"
           element={
             <RequireClient>
-              <ClientHistory />
+              <HistorialCliente />
             </RequireClient>
           }
         />
         <Route
           path="*"
           element={
-            isRegistered ? <NotFound /> : <Navigate to="/" replace />
+            isRegistered ? <PaginaNoEncontrada /> : <Navigate to="/" replace />
           }
         />
       </Routes>

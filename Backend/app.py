@@ -32,12 +32,12 @@ import io
 import csv
 from Backend.conexion_base import (
   db,
-  DatabaseConflictError,
-  DatabaseNotFoundError,
-  DatabaseValidationError,
+  ConflictoBaseDatosError,
+  BaseDatosNoEncontrada,
+  ValidacionBaseDatosError,
 )
 from Backend.modelo_poo import Cliente, Informe, Persona, Producto, Venta, Vendedor, calcular_recomendacion_precio, crear_usuario_desde_fila_usuario
-from Backend.recomendacion_precio import rank_similar_products, summarize_similarity_prices
+from Backend.recomendacion_precio import rankear_productos_similares, resumir_precios_similares
 
 logging.basicConfig(
   level=logging.INFO,
@@ -48,7 +48,7 @@ logger = logging.getLogger("daad-backend")
 FRONTEND_URL = os.environ.get("FRONTEND_URL", "http://localhost:5173")
 
 
-def build_allowed_origins(frontend_url: str) -> list[str]:
+def construir_origenes_permitidos(frontend_url: str) -> list[str]:
   allowed_origins = {frontend_url.strip()}
   if frontend_url.startswith("http://localhost:"):
     allowed_origins.add(frontend_url.replace("http://localhost:", "http://127.0.0.1:", 1))
@@ -61,7 +61,7 @@ pwd_context = CryptContext(schemes=["pbkdf2_sha256"], deprecated="auto")
 app = FastAPI(title="DAAD Auth API")
 app.add_middleware(
   CORSMiddleware,
-  allow_origins=build_allowed_origins(FRONTEND_URL),
+  allow_origins=construir_origenes_permitidos(FRONTEND_URL),
   allow_credentials=True,
   allow_methods=["*"],
   allow_headers=["*"],
@@ -125,11 +125,11 @@ class PurchaseRequest(BaseModel):
 
 
 
-def validate_email(email: str) -> bool:
+def validar_correo(email: str) -> bool:
   return "@" in email
 
 
-def validate_password(password: str) -> bool:
+def validar_contrasena(password: str) -> bool:
   return (
     len(password) >= 8
     and re.search(r"[A-Z]", password)
@@ -137,11 +137,11 @@ def validate_password(password: str) -> bool:
   )
 
 
-def normalize_email(email: str) -> str:
+def normalizar_correo(email: str) -> str:
   return email.strip().lower()
 
 
-def normalize_user_role(role: str) -> str:
+def normalizar_rol_usuario(role: str) -> str:
   normalized_role = role.strip().lower()
   if normalized_role in {"vendedor", "seller", "merchant"}:
     return "Vendedor"
@@ -153,25 +153,25 @@ def normalize_user_role(role: str) -> str:
   )
 
 
-def normalize_product_id(product_id: str) -> str:
+def normalizar_id_producto(product_id: str) -> str:
   return product_id.strip().upper()
 
 
-def normalize_optional_text(value: str | None) -> str | None:
+def normalizar_texto_opcional(value: str | None) -> str | None:
   if value is None:
     return None
   cleaned = value.strip()
   return cleaned or None
 
 
-def normalize_display_text(value: object | None, fallback: str = "") -> str:
+def normalizar_texto_mostrar(value: object | None, fallback: str = "") -> str:
   if value is None:
     return fallback
   cleaned = " ".join(str(value).split())
   return cleaned or fallback
 
 
-def _validate_non_negative(name: str, value: float | int | None) -> None:
+def _validar_no_negativo(name: str, value: float | int | None) -> None:
   if value is None:
     return
   if float(value) < 0:
@@ -181,7 +181,7 @@ def _validate_non_negative(name: str, value: float | int | None) -> None:
     )
 
 
-def _paginate_response(
+def _paginar_respuesta(
   items: list[dict[str, object | None]],
   total_items: int,
   page: int,
@@ -199,7 +199,7 @@ def _paginate_response(
 
 
 @app.get("/api/vendedor/reportes/ventas/csv")
-def export_sales_csv(period: str = Query("all")):
+def exportar_ventas_csv(period: str = Query("all")):
   start_date = resolve_period_start(period)
 
   query = (
@@ -273,7 +273,7 @@ OPTIONAL_PRODUCT_COLUMNS = ["marca", "stock", "precio_fabricacion", "fecha_caduc
 
 
 @lru_cache(maxsize=1)
-def get_product_columns() -> tuple[str, ...]:
+def obtener_columnas_producto() -> tuple[str, ...]:
   try:
     with db.connect() as connection:
       with connection.cursor() as cursor:
@@ -291,8 +291,8 @@ def get_product_columns() -> tuple[str, ...]:
   return tuple(row[0].lower() for row in rows)
 
 
-def build_product_select_columns() -> list[str]:
-  available = set(get_product_columns())
+def construir_columnas_seleccion_producto() -> list[str]:
+  available = set(obtener_columnas_producto())
   columns = [column for column in BASE_PRODUCT_COLUMNS if column in available]
   for column in OPTIONAL_PRODUCT_COLUMNS:
     if column in available:
@@ -300,9 +300,9 @@ def build_product_select_columns() -> list[str]:
   return columns
 
 
-def fetch_producto_by_id(product_id: str) -> dict[str, object | None] | None:
+def consultar_producto_por_id(product_id: str) -> dict[str, object | None] | None:
   try:
-    producto = db.fetch_producto_by_id(product_id)
+    producto = db.consultar_producto_por_id(product_id)
   except Exception as exc:
     logger.exception("Error al consultar producto: %s", exc)
     raise HTTPException(
@@ -312,12 +312,12 @@ def fetch_producto_by_id(product_id: str) -> dict[str, object | None] | None:
 
   if not producto:
     return None
-  return producto.to_dict()
+  return producto.a_diccionario()
 
 
-def fetch_price_history(product_id: str, limit: int = 12) -> list[dict[str, object]]:
+def obtener_historial_precios(product_id: str, limit: int = 12) -> list[dict[str, object]]:
   try:
-    return db.fetch_price_history(product_id, limit)
+    return db.obtener_historial_precios(product_id, limit)
   except Exception as exc:
     logger.exception("Error al consultar historial de precios: %s", exc)
     raise HTTPException(
@@ -326,9 +326,9 @@ def fetch_price_history(product_id: str, limit: int = 12) -> list[dict[str, obje
     )
 
 
-def fetch_competition_average(product_id: str) -> float | None:
+def obtener_promedio_competencia(product_id: str) -> float | None:
   try:
-    return db.fetch_competition_average(product_id)
+    return db.obtener_promedio_competencia(product_id)
   except Exception as exc:
     logger.exception("Error al consultar competencia de mercado: %s", exc)
     raise HTTPException(
@@ -337,9 +337,9 @@ def fetch_competition_average(product_id: str) -> float | None:
     )
 
 
-def fetch_product_vendor(product_id: str) -> dict[str, object | None] | None:
+def obtener_vendedor_producto(product_id: str) -> dict[str, object | None] | None:
   try:
-    return db.fetch_product_vendor(product_id)
+    return db.obtener_vendedor_producto(product_id)
   except Exception as exc:
     logger.exception("Error al consultar vendedor del producto: %s", exc)
     raise HTTPException(
@@ -348,9 +348,9 @@ def fetch_product_vendor(product_id: str) -> dict[str, object | None] | None:
     )
 
 
-def fetch_persona_by_id(user_id: str) -> Persona | None:
+def obtener_persona_por_id(user_id: str) -> Persona | None:
   try:
-    return db.fetch_persona_by_id(user_id)
+    return db.obtener_persona_por_id(user_id)
   except Exception as exc:
     logger.exception("Error al consultar usuario: %s", exc)
     raise HTTPException(
@@ -359,9 +359,9 @@ def fetch_persona_by_id(user_id: str) -> Persona | None:
     )
 
 
-def fetch_similarity_catalog_signature() -> tuple[int, str]:
+def obtener_firma_catalogo_similitud() -> tuple[int, str]:
   try:
-    return db.fetch_similarity_catalog_signature()
+    return db.obtener_firma_catalogo_similitud()
   except Exception as exc:
     logger.exception("Error al consultar la firma del catalogo para similitud: %s", exc)
     raise HTTPException(
@@ -371,9 +371,9 @@ def fetch_similarity_catalog_signature() -> tuple[int, str]:
 
 
 @lru_cache(maxsize=8)
-def load_similarity_catalog(signature: tuple[int, str]) -> list[dict[str, object | None]]:
+def cargar_catalogo_similitud(signature: tuple[int, str]) -> list[dict[str, object | None]]:
   try:
-    return db.load_similarity_catalog(signature)
+    return db.cargar_catalogo_similitud(signature)
   except Exception as exc:
     logger.exception("Error al cargar el catalogo para similitud: %s", exc)
     raise HTTPException(
@@ -382,7 +382,7 @@ def load_similarity_catalog(signature: tuple[int, str]) -> list[dict[str, object
     )
 
 
-def calculate_price_recommendation(
+def calcular_recomendacion_precio_app(
   product: dict[str, object | None],
   history: list[dict[str, object]],
   competition_average: float | None,
@@ -392,23 +392,23 @@ def calculate_price_recommendation(
     product_object,
     history,
     competition_average,
-    load_similarity_catalog(fetch_similarity_catalog_signature()),
+    cargar_catalogo_similitud(obtener_firma_catalogo_similitud()),
     limite=5,
   )
 
 
-def build_client_product_detail(product_id: str) -> dict[str, object | None]:
-  product = fetch_producto_by_id(product_id)
+def construir_detalle_producto_cliente(product_id: str) -> dict[str, object | None]:
+  product = consultar_producto_por_id(product_id)
   if not product:
     raise HTTPException(
       status_code=status.HTTP_404_NOT_FOUND,
       detail="El producto no existe.",
     )
 
-  history = fetch_price_history(product_id, limit=20)
-  competition_average = fetch_competition_average(product_id)
-  vendor = fetch_product_vendor(product_id)
-  recommendation = calculate_price_recommendation(product, history, competition_average)
+  history = obtener_historial_precios(product_id, limit=20)
+  competition_average = obtener_promedio_competencia(product_id)
+  vendor = obtener_vendedor_producto(product_id)
+  recommendation = calcular_recomendacion_precio_app(product, history, competition_average)
 
   return {
     "product": product,
@@ -420,9 +420,9 @@ def build_client_product_detail(product_id: str) -> dict[str, object | None]:
 
 
 @app.post("/api/productos/recomendacion-precio")
-def recommend_product_price(payload: ProductCreateRequest):
+def recomendar_precio_producto(payload: ProductCreateRequest):
   draft_product = Producto(
-    id_producto=normalize_product_id(payload.id_producto),
+    id_producto=normalizar_id_producto(payload.id_producto),
     nombre=payload.nombre,
     marca=payload.marca,
     precio_venta_actual=payload.precio_actual,
@@ -436,26 +436,26 @@ def recommend_product_price(payload: ProductCreateRequest):
     draft_product,
     [],
     None,
-    load_similarity_catalog(fetch_similarity_catalog_signature()),
+    cargar_catalogo_similitud(obtener_firma_catalogo_similitud()),
     limite=5,
   )
 
 
 @app.get("/api/health")
-def healthcheck():
+def estado_salud():
   return {"status": "ok"}
 
 
 @app.post("/api/auth/register")
-def register_user(payload: RegisterRequest):
-  email = normalize_email(payload.correo)
-  tipo_usuario = normalize_user_role(payload.tipo_usuario)
-  if not validate_email(email):
+def registrar_usuario(payload: RegisterRequest):
+  email = normalizar_correo(payload.correo)
+  tipo_usuario = normalizar_rol_usuario(payload.tipo_usuario)
+  if not validar_correo(email):
     raise HTTPException(
       status_code=status.HTTP_400_BAD_REQUEST,
       detail="Correo no valido.",
     )
-  if not validate_password(payload.contrasena):
+  if not validar_contrasena(payload.contrasena):
     raise HTTPException(
       status_code=status.HTTP_400_BAD_REQUEST,
       detail="La contrasena no cumple los criterios.",
@@ -483,8 +483,8 @@ def register_user(payload: RegisterRequest):
     )
 
   try:
-    db.register_user(persona)
-  except DatabaseConflictError as exc:
+    db.registrar_usuario(persona)
+  except ConflictoBaseDatosError as exc:
     raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc))
   except Exception as exc:
     logger.exception("Error al registrar usuario: %s", exc)
@@ -493,14 +493,14 @@ def register_user(payload: RegisterRequest):
       detail="No se pudo registrar el usuario.",
     )
 
-  return persona.to_public_dict()
+  return persona.a_diccionario_publico()
 
 
 @app.post("/api/auth/login")
-def login_user(payload: LoginRequest):
-  email = normalize_email(payload.correo)
-  tipo_usuario = normalize_user_role(payload.tipo_usuario) if payload.tipo_usuario else None
-  if not validate_email(email):
+def iniciar_sesion_usuario(payload: LoginRequest):
+  email = normalizar_correo(payload.correo)
+  tipo_usuario = normalizar_rol_usuario(payload.tipo_usuario) if payload.tipo_usuario else None
+  if not validar_correo(email):
     raise HTTPException(
       status_code=status.HTTP_400_BAD_REQUEST,
       detail="Correo no valido.",
@@ -566,13 +566,13 @@ def login_user(payload: LoginRequest):
       detail="Credenciales incorrectas.",
     )
 
-  return user.to_public_dict()
+  return user.a_diccionario_publico()
 
 
 @app.put("/api/auth/profile")
-def update_profile(payload: ProfileUpdateRequest):
+def actualizar_perfil_usuario_endpoint(payload: ProfileUpdateRequest):
   user_id = payload.id_usuario.strip()
-  new_name = normalize_optional_text(payload.nombre)
+  new_name = normalizar_texto_opcional(payload.nombre)
   new_password = payload.contrasena.strip() if payload.contrasena is not None else None
 
   if not user_id:
@@ -588,13 +588,13 @@ def update_profile(payload: ProfileUpdateRequest):
     )
 
   new_password_hash = pwd_context.hash(new_password) if new_password else None
-  if new_password and not validate_password(new_password):
+  if new_password and not validar_contrasena(new_password):
     raise HTTPException(
       status_code=status.HTTP_400_BAD_REQUEST,
       detail="La nueva contrasena no cumple los criterios.",
     )
 
-  persona = fetch_persona_by_id(user_id)
+  persona = obtener_persona_por_id(user_id)
   if not persona:
     raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="El usuario no existe.")
 
@@ -604,10 +604,10 @@ def update_profile(payload: ProfileUpdateRequest):
     persona.cambiar_contrasena(new_password_hash)
 
   try:
-    db.update_user_profile(persona, password_hash=new_password_hash)
-  except DatabaseNotFoundError as exc:
+    db.actualizar_perfil_usuario(persona, password_hash=new_password_hash)
+  except BaseDatosNoEncontrada as exc:
     raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc))
-  except DatabaseValidationError as exc:
+  except ValidacionBaseDatosError as exc:
     raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc))
   except Exception as exc:
     logger.exception("Error al actualizar perfil: %s", exc)
@@ -616,20 +616,20 @@ def update_profile(payload: ProfileUpdateRequest):
       detail="No se pudo actualizar el perfil.",
     )
 
-  persona_actualizada = fetch_persona_by_id(user_id)
+  persona_actualizada = obtener_persona_por_id(user_id)
   if not persona_actualizada:
     raise HTTPException(
       status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
       detail="No se pudo recuperar el perfil actualizado.",
     )
 
-  return persona_actualizada.to_public_dict()
+  return persona_actualizada.a_diccionario_publico()
 
 
 @app.get("/api/productos")
-def list_productos(page: int = Query(1, ge=1), page_size: int = Query(20, ge=1, le=100)):
+def listar_productos(page: int = Query(1, ge=1), page_size: int = Query(20, ge=1, le=100)):
   try:
-    productos, total_items = db.list_productos(page, page_size)
+    productos, total_items = db.listar_productos(page, page_size)
   except Exception as exc:
     logger.exception("Error al listar productos: %s", exc)
     raise HTTPException(
@@ -637,8 +637,8 @@ def list_productos(page: int = Query(1, ge=1), page_size: int = Query(20, ge=1, 
       detail="No se pudieron obtener los productos.",
     )
 
-  return _paginate_response(
-    [producto.to_dict() for producto in productos],
+  return _paginar_respuesta(
+    [producto.a_diccionario() for producto in productos],
     total_items,
     page,
     page_size,
@@ -646,7 +646,7 @@ def list_productos(page: int = Query(1, ge=1), page_size: int = Query(20, ge=1, 
 
 
 @app.get("/api/vendedor/productos")
-def list_vendor_products(
+def listar_productos_vendedor(
   vendedor_id: str = Query(..., min_length=1),
   page: int = Query(1, ge=1),
   page_size: int = Query(20, ge=1, le=100),
@@ -656,7 +656,7 @@ def list_vendor_products(
     raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="El vendedor es obligatorio.")
 
   try:
-    productos, total_items = db.list_vendor_products(normalized_vendor_id, page, page_size)
+    productos, total_items = db.listar_productos_vendedor(normalized_vendor_id, page, page_size)
   except Exception as exc:
     logger.exception("Error al listar productos del vendedor: %s", exc)
     raise HTTPException(
@@ -664,8 +664,8 @@ def list_vendor_products(
       detail="No se pudieron obtener los productos del vendedor.",
     )
 
-  return _paginate_response(
-    [producto.to_dict() for producto in productos],
+  return _paginar_respuesta(
+    [producto.a_diccionario() for producto in productos],
     total_items,
     page,
     page_size,
@@ -673,8 +673,8 @@ def list_vendor_products(
 
 
 @app.get("/api/productos/{product_id}")
-def get_producto(product_id: str):
-  producto = fetch_producto_by_id(normalize_product_id(product_id))
+def obtener_producto(product_id: str):
+  producto = consultar_producto_por_id(normalizar_id_producto(product_id))
   if not producto:
     raise HTTPException(
       status_code=status.HTTP_404_NOT_FOUND,
@@ -684,20 +684,20 @@ def get_producto(product_id: str):
 
 
 @app.post("/api/productos")
-def create_producto(payload: ProductCreateRequest):
-  product_id = normalize_product_id(payload.id_producto)
+def crear_producto(payload: ProductCreateRequest):
+  product_id = normalizar_id_producto(payload.id_producto)
   nombre = payload.nombre.strip()
-  marca = normalize_optional_text(payload.marca)
-  categoria = normalize_optional_text(payload.categoria)
-  imagen_url = normalize_optional_text(payload.imagen_url)
+  marca = normalizar_texto_opcional(payload.marca)
+  categoria = normalizar_texto_opcional(payload.categoria)
+  imagen_url = normalizar_texto_opcional(payload.imagen_url)
 
   if not product_id:
     raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="El id del producto es obligatorio.")
   if not nombre:
     raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="El nombre del producto es obligatorio.")
-  _validate_non_negative("precio_actual", payload.precio_actual)
-  _validate_non_negative("stock", payload.stock)
-  _validate_non_negative("precio_fabricacion", payload.precio_fabricacion)
+  _validar_no_negativo("precio_actual", payload.precio_actual)
+  _validar_no_negativo("stock", payload.stock)
+  _validar_no_negativo("precio_fabricacion", payload.precio_fabricacion)
 
   producto = Producto(
     id_producto=product_id,
@@ -711,7 +711,7 @@ def create_producto(payload: ProductCreateRequest):
     categoria=categoria,
   )
 
-  existing = fetch_producto_by_id(product_id)
+  existing = consultar_producto_por_id(product_id)
   if existing:
     raise HTTPException(
       status_code=status.HTTP_409_CONFLICT,
@@ -720,8 +720,8 @@ def create_producto(payload: ProductCreateRequest):
 
   vendor_id = payload.id_vendedor.strip() if payload.id_vendedor else None
   try:
-    db.create_producto(producto, vendor_id=vendor_id)
-  except DatabaseNotFoundError as exc:
+    db.crear_producto(producto, vendor_id=vendor_id)
+  except BaseDatosNoEncontrada as exc:
     raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc))
   except Exception as exc:
     logger.exception("Error al crear producto: %s", exc)
@@ -730,14 +730,14 @@ def create_producto(payload: ProductCreateRequest):
       detail="No se pudo crear el producto.",
     )
 
-  producto_creado = fetch_producto_by_id(product_id)
+  producto_creado = consultar_producto_por_id(product_id)
   return producto_creado
 
 
 @app.put("/api/productos/{product_id}")
-def update_producto(product_id: str, payload: ProductUpdateRequest):
-  normalized_id = normalize_product_id(product_id)
-  existing = fetch_producto_by_id(normalized_id)
+def actualizar_producto(product_id: str, payload: ProductUpdateRequest):
+  normalized_id = normalizar_id_producto(product_id)
+  existing = consultar_producto_por_id(normalized_id)
   if not existing:
     raise HTTPException(
       status_code=status.HTTP_404_NOT_FOUND,
@@ -754,18 +754,18 @@ def update_producto(product_id: str, payload: ProductUpdateRequest):
   producto = Producto.desde_dict(existing)
   producto.actualizar_datos(
     nombre=payload.nombre.strip() if payload.nombre is not None else None,
-    marca=normalize_optional_text(payload.marca) if payload.marca is not None else None,
-    categoria=normalize_optional_text(payload.categoria) if payload.categoria is not None else None,
+    marca=normalizar_texto_opcional(payload.marca) if payload.marca is not None else None,
+    categoria=normalizar_texto_opcional(payload.categoria) if payload.categoria is not None else None,
     precio_actual=payload.precio_actual,
     stock=payload.stock,
     precio_fabricacion=payload.precio_fabricacion,
     fecha_caducidad=payload.fecha_caducidad,
-    imagen_url=normalize_optional_text(payload.imagen_url) if payload.imagen_url is not None else None,
+    imagen_url=normalizar_texto_opcional(payload.imagen_url) if payload.imagen_url is not None else None,
   )
 
   try:
     provided = set(getattr(payload, "__fields_set__", set()))
-    db.update_producto(producto, normalized_id, provided)
+    db.actualizar_producto(normalized_id, producto, provided)
   except Exception as exc:
     logger.exception("Error al actualizar producto: %s", exc)
     raise HTTPException(
@@ -773,16 +773,16 @@ def update_producto(product_id: str, payload: ProductUpdateRequest):
       detail="No se pudo actualizar el producto.",
     )
 
-  producto = fetch_producto_by_id(normalized_id)
+  producto = consultar_producto_por_id(normalized_id)
   return producto
 
 
 @app.delete("/api/productos/{product_id}")
-def delete_producto(product_id: str):
-  normalized_id = normalize_product_id(product_id)
+def eliminar_producto(product_id: str):
+  normalized_id = normalizar_id_producto(product_id)
 
   try:
-    db.delete_producto(normalized_id)
+    db.eliminar_producto(normalized_id)
   except HTTPException:
     raise
   except Exception as exc:
@@ -795,7 +795,7 @@ def delete_producto(product_id: str):
   return {"detail": "Producto eliminado correctamente."}
 
 
-def resolve_period_start(period: str) -> datetime | None:
+def resolver_inicio_periodo(period: str) -> datetime | None:
   now = datetime.utcnow()
   if period == "30d":
     return now - timedelta(days=30)
@@ -809,7 +809,7 @@ def resolve_period_start(period: str) -> datetime | None:
 
 
 @app.get("/api/cliente/productos")
-def list_client_products(
+def listar_productos_cliente(
   page: int = Query(1, ge=1),
   page_size: int = Query(12, ge=1, le=100),
   search: str | None = None,
@@ -859,11 +859,11 @@ def list_client_products(
 
   items = []
   for row in rows:
-    producto = Producto.from_row(
+    producto = Producto.desde_fila(
       row,
       ["id_producto", "nombre", "marca", "categoria", "precio_actual", "stock", "precio_fabricacion", "fecha_actualizacion"],
     )
-    producto_dict = producto.to_dict()
+    producto_dict = producto.a_diccionario()
     producto_dict.update(
       {
         "vendedor_nombre": row[8],
@@ -872,30 +872,30 @@ def list_client_products(
     )
     items.append(producto_dict)
 
-  return _paginate_response(items, total_items, current_page, page_size)
+  return _paginar_respuesta(items, total_items, current_page, page_size)
 
 
 @app.get("/api/cliente/productos/{product_id}")
-def get_client_product(product_id: str):
-  return build_client_product_detail(normalize_product_id(product_id))
+def obtener_producto_cliente(product_id: str):
+  return construir_detalle_producto_cliente(normalizar_id_producto(product_id))
 
 
 @app.post("/api/cliente/compras")
-def create_purchase(payload: PurchaseRequest):
+def crear_compra(payload: PurchaseRequest):
   if not payload.id_cliente.strip():
     raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="El cliente es obligatorio.")
   if not payload.items:
     raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="El carrito esta vacio.")
 
   try:
-    result = db.create_purchase(
+    result = db.crear_compra(
       payload.id_cliente,
       payload.id_vendedor,
       [item.dict() for item in payload.items],
     )
-  except DatabaseNotFoundError as exc:
+  except BaseDatosNoEncontrada as exc:
     raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc))
-  except DatabaseValidationError as exc:
+  except ValidacionBaseDatosError as exc:
     raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc))
   except Exception as exc:
     logger.exception("Error al registrar compra: %s", exc)
@@ -908,17 +908,17 @@ def create_purchase(payload: PurchaseRequest):
 
 
 @app.get("/api/cliente/compras")
-def list_client_purchases(
+def listar_compras_cliente(
   id_cliente: str = Query(...),
   period: str = Query("all"),
   page: int = Query(1, ge=1),
   page_size: int = Query(10, ge=1, le=50),
 ):
   client_id = id_cliente.strip()
-  start_date = resolve_period_start(period)
+  start_date = resolver_inicio_periodo(period)
 
   try:
-    items, total_items = db.list_client_purchases(client_id, start_date, page, page_size)
+    items, total_items = db.listar_compras_cliente(client_id, start_date, page, page_size)
     total_pages = max(1, (total_items + page_size - 1) // page_size) if total_items else 1
     current_page = min(page, total_pages)
   except Exception as exc:
@@ -938,7 +938,7 @@ def list_client_purchases(
 
 
 @app.get("/api/vendedor/compras")
-def list_vendor_purchases(
+def listar_compras_vendedor(
   id_vendedor: str = Query(...),
   period: str = Query("all"),
   page: int = Query(1, ge=1),
@@ -948,10 +948,10 @@ def list_vendor_purchases(
   if not vendor_id:
     raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="El vendedor es obligatorio.")
 
-  start_date = resolve_period_start(period)
+  start_date = resolver_inicio_periodo(period)
 
   try:
-    items, total_items = db.list_vendor_purchases(vendor_id, start_date, page, page_size)
+    items, total_items = db.listar_compras_vendedor(vendor_id, start_date, page, page_size)
     total_pages = max(1, (total_items + page_size - 1) // page_size) if total_items else 1
     current_page = min(page, total_pages)
   except Exception as exc:
@@ -971,10 +971,10 @@ def list_vendor_purchases(
 
 
 @app.get("/api/cliente/compras/{sale_id}")
-def get_client_purchase_ticket(sale_id: str):
+def obtener_ticket_compra_cliente(sale_id: str):
   try:
-    ticket = db.get_client_purchase_ticket(sale_id)
-  except DatabaseNotFoundError as exc:
+    ticket = db.obtener_ticket_compra_cliente(sale_id)
+  except BaseDatosNoEncontrada as exc:
     raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc))
   except Exception as exc:
     logger.exception("Error al obtener el ticket de compra: %s", exc)
@@ -987,9 +987,9 @@ def get_client_purchase_ticket(sale_id: str):
 
 
 @app.get("/api/vendedor/reportes/indicadores")
-def get_financial_indicators():
+def obtener_indicadores_financieros():
   try:
-    indicators = db.get_financial_indicators()
+    indicators = db.obtener_indicadores_financieros()
   except Exception as exc:
     logger.exception("Error al calcular indicadores financieros: %s", exc)
     raise HTTPException(
@@ -997,7 +997,7 @@ def get_financial_indicators():
       detail="No se pudieron calcular los indicadores financieros.",
     )
 
-  report = Informe.from_db_aggregates(
+  report = Informe.desde_agregados_bd(
     ingresos_totales=float(indicators["ingresos_totales"]),
     costos_totales=float(indicators["costos_totales"]),
     alertas_stock_bajo=[],
@@ -1026,3 +1026,7 @@ def get_financial_indicators():
     "low_stock_products": report.productos_stock_bajo,
     "stagnant_products": report.productos_estancados,
   }
+
+
+
+# Nota: he renombrado las funciones del backend al español y eliminado aliases.

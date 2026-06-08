@@ -7,7 +7,7 @@ from typing import Any, Iterable, Sequence
 
 import numpy as np
 
-from Backend.recomendacion_precio import rank_similar_products, summarize_similarity_prices
+from Backend.recomendacion_precio import rankear_productos_similares, resumir_precios_similares
 
 
 def _limpiar_texto(valor: object | None) -> str:
@@ -61,7 +61,7 @@ def _validar_password(password: str) -> str:
 
 def _producto_a_diccionario(producto: Producto | dict[str, object | None]) -> dict[str, object | None]:
   if isinstance(producto, Producto):
-    return producto.to_dict()
+    return producto.a_diccionario()
   return dict(producto)
 
 
@@ -136,7 +136,7 @@ class Persona(ABC):
     if contrasena_hash is not None:
       self.cambiar_contrasena(contrasena_hash)
 
-  def to_public_dict(self) -> dict[str, object | None]:
+  def a_diccionario_publico(self) -> dict[str, object | None]:
     return {
       "id": self.id,
       "nombre": self.nombre,
@@ -144,7 +144,7 @@ class Persona(ABC):
       "tipo_usuario": self.tipo_usuario,
     }
 
-  def to_row(self) -> dict[str, object | None]:
+  def a_fila(self) -> dict[str, object | None]:
     return {
       "id_usuario": self.id,
       "nombre": self.nombre,
@@ -154,13 +154,7 @@ class Persona(ABC):
       "password_hash": self.password_hash,
     }
 
-  @classmethod
-  def from_row(
-    cls,
-    row: Sequence[object],
-    password_hash: str | None = None,
-  ) -> "Persona":
-    return cls.desde_fila_usuario(row, password_hash=password_hash)
+  # Nota: el método en inglés fue eliminado. Usar `desde_fila_usuario`.
 
   @classmethod
   def desde_fila_usuario(
@@ -241,9 +235,6 @@ class Producto:
     datos = dict(zip(columnas, fila))
     return cls.desde_dict(datos)
 
-  @classmethod
-  def from_row(cls, fila: Sequence[object], columnas: Sequence[str]) -> "Producto":
-    return cls.desde_fila(fila, columnas)
 
   def cambiar_precio(self, nuevo_precio: float) -> None:
     precio_limpio = float(nuevo_precio)
@@ -297,7 +288,7 @@ class Producto:
     if imagen_url is not None:
       self.imagen_url = _limpiar_texto(imagen_url) or None
 
-  def to_dict(self) -> dict[str, object | None]:
+  def a_diccionario(self) -> dict[str, object | None]:
     return {
       "id_producto": self.id_producto,
       "nombre": self.nombre,
@@ -311,7 +302,7 @@ class Producto:
       "fecha_actualizacion": self.fecha_actualizacion.isoformat() if self.fecha_actualizacion else None,
     }
 
-  def to_row(self) -> dict[str, object | None]:
+  def a_fila(self) -> dict[str, object | None]:
     return {
       "id_producto": self.id_producto,
       "nombre": self.nombre,
@@ -349,16 +340,16 @@ class Venta:
       return None
     return round(self.total_pagado / self.cantidad, 2)
 
-  def to_dict(self) -> dict[str, object | None]:
+  def a_diccionario(self) -> dict[str, object | None]:
     return {
       "id_venta": self.id_venta,
-      "producto": self.producto.to_dict(),
+      "producto": self.producto.a_diccionario(),
       "cantidad": self.cantidad,
       "fecha_venta": self.fecha_venta.isoformat() if hasattr(self.fecha_venta, "isoformat") else str(self.fecha_venta),
       "total_pagado": self.total_pagado,
     }
 
-  def to_row(self) -> dict[str, object | None]:
+  def a_fila(self) -> dict[str, object | None]:
     return {
       "id_venta": self.id_venta,
       "id_producto": self.producto.id_producto,
@@ -485,7 +476,7 @@ class Informe:
     self.productos_estancados = int(productos_estancados)
 
   @classmethod
-  def from_db_aggregates(
+  def desde_agregados_bd(
     cls,
     ingresos_totales: float,
     costos_totales: float,
@@ -514,12 +505,12 @@ class Informe:
       productos_estancados=productos_estancados,
     )
 
-  def to_dict(self) -> dict[str, object | None]:
+  def a_diccionario(self) -> dict[str, object | None]:
     return {
       "ingresos_totales": self.ingresos_totales,
       "costos_totales": self.costos_totales,
       "margen_ganancia": self.margen_ganancia,
-      "alertas_stock_bajo": [producto.to_dict() for producto in self.alertas_stock_bajo],
+      "alertas_stock_bajo": [producto.a_diccionario() for producto in self.alertas_stock_bajo],
       "total_productos": self.total_productos,
       "total_vendedores": self.total_vendedores,
       "total_clientes": self.total_clientes,
@@ -543,13 +534,13 @@ def calcular_recomendacion_precio(
   stock = int(producto_dict.get("stock") or 0)
 
   catalogo_similares = catalogo or []
-  similar_products = rank_similar_products(
+  similar_products = rankear_productos_similares(
     producto_dict,
     catalogo_similares,
     limit=limite,
     exclude_product_id=str(producto_dict.get("id_producto") or ""),
   )
-  market_reference, market_floor, market_ceiling = summarize_similarity_prices(similar_products)
+  market_reference, market_floor, market_ceiling = resumir_precios_similares(similar_products)
 
   history = list(historial or [])
   history_prices = [float(item["precio"]) for item in history if item.get("precio") is not None]
@@ -732,9 +723,9 @@ class Cliente(Persona):
   def registrar_compra(self, venta: Venta) -> None:
     self.historial_compras.append(venta)
 
-  def to_row(self) -> dict[str, object | None]:
+  def a_fila(self) -> dict[str, object | None]:
     """Serializa el cliente incluyendo su presupuesto maximo."""
-    base = super().to_row()
+    base = super().a_fila()
     base["presupuesto_maximo"] = self.presupuesto_maximo
     return base
 
@@ -839,9 +830,9 @@ class Vendedor(Persona):
     if not any(p.id_producto == producto.id_producto for p in self.productos_asignados):
       self.productos_asignados.append(producto)
 
-  def to_row(self) -> dict[str, object | None]:
+  def a_fila(self) -> dict[str, object | None]:
     """Serializa el vendedor incluyendo campos propios de la tabla vendedores."""
-    base = super().to_row()
+    base = super().a_fila()
     base.update({
       "id_vendedor": self.id_vendedor,
       "codigo_vendedor": self.codigo_vendedor,
@@ -850,7 +841,7 @@ class Vendedor(Persona):
     })
     return base
 
-  def to_vendor_dict(self) -> dict[str, object | None]:
+  def a_diccionario_vendedor(self) -> dict[str, object | None]:
     """Diccionario publico con datos del vendedor para respuestas de API."""
     return {
       "id_vendedor": self.id_vendedor,
@@ -892,3 +883,6 @@ def crear_usuario_desde_fila_usuario(
   password_hash: str | None = None,
 ) -> Persona:
   return Persona.desde_fila_usuario(fila, password_hash=password_hash)
+
+
+# Se eliminan aliases en inglés para mantener nombres nativos en español

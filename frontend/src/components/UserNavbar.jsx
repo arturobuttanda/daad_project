@@ -1,6 +1,6 @@
 import { Link, useNavigate } from "react-router-dom";
 
-export default function UserNavbar({ userName, onLogout, homeLabel = "Inicio" }) {
+export default function BarraUsuario({ userName, onLogout, homeLabel = "Inicio" }) {
   const navigate = useNavigate();
 
   const handleLogout = () => {
@@ -25,7 +25,7 @@ export default function UserNavbar({ userName, onLogout, homeLabel = "Inicio" })
         onClick={handleLogout}
         className="w-full rounded-2xl border border-copper px-4 py-2 text-sm font-semibold text-copper transition hover:bg-[rgba(242,107,91,0.08)] sm:w-auto"
       >
-        Cerrar sesion
+        Cerrar sesión
       </button>
     </header>
   );

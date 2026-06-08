@@ -28,7 +28,7 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 
-def load_env_file() -> None:
+def cargar_env() -> None:
     """Carga variables desde el .env del proyecto si no existen en el entorno."""
     project_root = Path(__file__).resolve().parents[2]
     env_path = project_root / ".env"
@@ -49,7 +49,7 @@ def load_env_file() -> None:
             os.environ.setdefault(key, value)
 
 
-load_env_file()
+cargar_env()
 
 
 DB_USER = os.environ["DB_USER"]
@@ -106,21 +106,21 @@ WHEN NOT MATCHED THEN
 """
 
 
-def normalize_text(value: Any) -> str:
+def normalizar_texto(value: Any) -> str:
     if value is None:
         return ""
     return re.sub(r"\s+", " ", str(value)).strip()
 
 
-def parse_number(value: Any) -> float:
-    text = normalize_text(value)
+def parsear_numero(value: Any) -> float:
+    text = normalizar_texto(value)
     if not text:
         raise ValueError("Valor numerico vacio")
     return float(text)
 
 
-def parse_timestamp(value: Any) -> datetime:
-    text = normalize_text(value)
+def parsear_timestamp(value: Any) -> datetime:
+    text = normalizar_texto(value)
     if not text:
         raise ValueError("Fecha vacia")
 
@@ -144,11 +144,11 @@ def parse_timestamp(value: Any) -> datetime:
     raise ValueError(f"Formato de fecha no soportado: {value}")
 
 
-def parse_date(value: Any) -> date:
-    return parse_timestamp(value).date()
+def parsear_fecha(value: Any) -> date:
+    return parsear_timestamp(value).date()
 
 
-def get_connection_string_from_tnsnames(tnsnames_path: str, dsn_name: str) -> str | None:
+def obtener_cadena_conexion_desde_tnsnames(tnsnames_path: str, dsn_name: str) -> str | None:
     if not os.path.exists(tnsnames_path):
         logger.warning("No se encontro tnsnames.ora en: %s", tnsnames_path)
         return None
@@ -192,9 +192,9 @@ def get_connection_string_from_tnsnames(tnsnames_path: str, dsn_name: str) -> st
         return None
 
 
-def connect_oracle() -> oracledb.Connection:
+def obtener_conexion_oracle() -> oracledb.Connection:
     tns_path = os.path.join(WALLET_LOCATION, "tnsnames.ora")
-    connection_string = get_connection_string_from_tnsnames(tns_path, DB_DSN)
+    connection_string = obtener_cadena_conexion_desde_tnsnames(tns_path, DB_DSN)
 
     if connection_string:
         logger.info("DSN '%s' resuelto desde tnsnames.ora.", DB_DSN)
@@ -217,7 +217,7 @@ def connect_oracle() -> oracledb.Connection:
     )
 
 
-def read_productos_csv(csv_path: Path) -> list[dict[str, Any]]:
+def leer_productos_csv(csv_path: Path) -> list[dict[str, Any]]:
     if not csv_path.exists():
         raise FileNotFoundError(f"No se encontro el archivo: {csv_path}")
 
@@ -232,18 +232,18 @@ def read_productos_csv(csv_path: Path) -> list[dict[str, Any]]:
         for row in reader:
             registros.append(
                 {
-                    "id_producto": normalize_text(row["ID_PRODUCTO"]),
-                    "nombre": normalize_text(row["NOMBRE"]),
-                    "categoria": normalize_text(row["CATEGORIA"]),
-                    "precio_actual": parse_number(row["PRECIO_ACTUAL"]),
-                    "fecha_actualizacion": parse_timestamp(row["FECHA_ACTUALIZACION"]),
+                    "id_producto": normalizar_texto(row["ID_PRODUCTO"]),
+                    "nombre": normalizar_texto(row["NOMBRE"]),
+                    "categoria": normalizar_texto(row["CATEGORIA"]),
+                    "precio_actual": parsear_numero(row["PRECIO_ACTUAL"]),
+                    "fecha_actualizacion": parsear_timestamp(row["FECHA_ACTUALIZACION"]),
                 }
             )
 
     return registros
 
 
-def read_historial_csv(csv_path: Path) -> list[dict[str, Any]]:
+def leer_historial_csv(csv_path: Path) -> list[dict[str, Any]]:
     if not csv_path.exists():
         raise FileNotFoundError(f"No se encontro el archivo: {csv_path}")
 
@@ -258,16 +258,16 @@ def read_historial_csv(csv_path: Path) -> list[dict[str, Any]]:
         for row in reader:
             registros.append(
                 {
-                    "id_producto": normalize_text(row["ID_PRODUCTO"]),
-                    "fecha": parse_date(row["FECHA"]),
-                    "precio_registrado": parse_number(row["PRECIO_REGISTRADO"]),
+                    "id_producto": normalizar_texto(row["ID_PRODUCTO"]),
+                    "fecha": parsear_fecha(row["FECHA"]),
+                    "precio_registrado": parsear_numero(row["PRECIO_REGISTRADO"]),
                 }
             )
 
     return registros
 
 
-def execute_batches(cursor: oracledb.Cursor, sql: str, data: list[dict[str, Any]], label: str, batch_size: int) -> None:
+def ejecutar_lotes(cursor: oracledb.Cursor, sql: str, data: list[dict[str, Any]], label: str, batch_size: int) -> None:
     if not data:
         logger.info("No hay registros para insertar en %s.", label)
         return
@@ -281,21 +281,21 @@ def execute_batches(cursor: oracledb.Cursor, sql: str, data: list[dict[str, Any]
         logger.info("%s: lote %s de %s completado (%s registros).", label, index // batch_size + 1, (total + batch_size - 1) // batch_size, len(batch))
 
 
-def load_csvs(productos_csv: Path, historial_csv: Path, batch_size: int) -> None:
-    productos = read_productos_csv(productos_csv)
-    historial = read_historial_csv(historial_csv)
+def cargar_csvs(productos_csv: Path, historial_csv: Path, batch_size: int) -> None:
+    productos = leer_productos_csv(productos_csv)
+    historial = leer_historial_csv(historial_csv)
 
     logger.info("Archivo de productos: %s (%s filas)", productos_csv, len(productos))
     logger.info("Archivo de historial: %s (%s filas)", historial_csv, len(historial))
 
     connection = None
     try:
-        connection = connect_oracle()
+        connection = obtener_conexion_oracle()
         connection.autocommit = False
         cursor = connection.cursor()
 
-        execute_batches(cursor, SQL_MERGE_PRODUCTOS, productos, "PRODUCTOS", batch_size)
-        execute_batches(cursor, SQL_MERGE_HISTORIAL, historial, "HISTORIAL_PRECIOS", batch_size)
+        ejecutar_lotes(cursor, SQL_MERGE_PRODUCTOS, productos, "PRODUCTOS", batch_size)
+        ejecutar_lotes(cursor, SQL_MERGE_HISTORIAL, historial, "HISTORIAL_PRECIOS", batch_size)
 
         connection.commit()
         logger.info("Carga finalizada con exito.")
@@ -310,7 +310,7 @@ def load_csvs(productos_csv: Path, historial_csv: Path, batch_size: int) -> None
             connection.close()
 
 
-def build_parser() -> argparse.ArgumentParser:
+def construir_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description="Carga Productos.csv e Historial Precios.csv en Oracle.")
     parser.add_argument(
         "--productos",
@@ -332,10 +332,10 @@ def build_parser() -> argparse.ArgumentParser:
 
 
 def main() -> None:
-    parser = build_parser()
+    parser = construir_parser()
     args = parser.parse_args()
 
-    load_csvs(
+    cargar_csvs(
         Path(args.productos),
         Path(args.historial),
         args.batch_size,

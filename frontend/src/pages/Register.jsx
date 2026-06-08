@@ -1,14 +1,14 @@
 import { useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import toast from "react-hot-toast";
-import AuthNavbar from "../components/AuthNavbar.jsx";
-import { notifyAuthChange } from "../utils/authEvents.js";
+import BarraAutenticacion from "../components/AuthNavbar.jsx";
+import { notificar_cambio_autenticacion } from "../utils/authEvents.js";
 
 const API_URL = import.meta.env.VITE_API_URL || "http://localhost:8000";
 const FIELD_LIMIT = 60;
 const PHONE_LIMIT = 10;
 
-export default function Register() {
+export default function Registro() {
   const navigate = useNavigate();
   const [showPassword, setShowPassword] = useState(false);
   const [selectedPortal, setSelectedPortal] = useState("Cliente");
@@ -36,7 +36,7 @@ export default function Register() {
   const isFormValid =
     isFormComplete && isEmailValid && isPasswordValid && isPasswordMatch;
 
-  const handleChange = (event) => {
+  const manejar_cambio = (event) => {
     const { name, value } = event.target;
     const nextValue =
       name === "telefono"
@@ -48,7 +48,7 @@ export default function Register() {
     }));
   };
 
-  const handleSubmit = async (event) => {
+  const manejar_envio = async (event) => {
     event.preventDefault();
     if (isSubmitting) {
       return;
@@ -83,7 +83,7 @@ export default function Register() {
       localStorage.setItem("userType", data.tipo_usuario);
       localStorage.setItem("userName", data.nombre);
       localStorage.setItem("userId", data.id);
-      notifyAuthChange();
+      notificar_cambio_autenticacion();
       toast.success(`Registro completado. Bienvenido, ${data.nombre}.`);
       if (data.tipo_usuario === "Vendedor") {
         navigate("/vendedor");
@@ -100,8 +100,8 @@ export default function Register() {
   return (
     <div className="page-wrap min-h-screen py-8 sm:py-10">
       <div className="mx-auto mb-8 max-w-4xl">
-        <AuthNavbar title="Join our premium commerce ecosystem" />
-      </div>
+            <BarraAutenticacion title="Únete a nuestro ecosistema comercial" />
+          </div>
 
       <div className="mx-auto flex max-w-4xl justify-center">
         <section className="glass-panel relative w-full max-w-xl overflow-hidden rounded-2xl border border-[#C9D2E7] p-6 sm:p-7 md:p-8">
@@ -122,15 +122,15 @@ export default function Register() {
                   to="/login"
                   className="rounded-lg border border-transparent px-4 py-2.5 text-center transition hover:border-[#C7D2FE] hover:bg-white hover:text-ocean"
                 >
-                  Login
+                  Iniciar sesión
                 </Link>
                 <div className="rounded-lg border border-[#C7D2FE] bg-white px-4 py-2.5 text-center text-ocean">
-                  Sign Up
+                  Registrarse
                 </div>
               </div>
             </div>
 
-          <form className="mt-6 grid gap-4" onSubmit={handleSubmit}>
+          <form className="mt-6 grid gap-4" onSubmit={manejar_envio}>
             <div>
               <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">
                 Elige tu tipo de cuenta
@@ -179,7 +179,7 @@ export default function Register() {
                   name="nombre"
                   maxLength={FIELD_LIMIT}
                   value={formValues.nombre}
-                  onChange={handleChange}
+                  onChange={manejar_cambio}
                 />
               </div>
               <div>
@@ -195,7 +195,7 @@ export default function Register() {
                   inputMode="numeric"
                   pattern="[0-9]{10}"
                   value={formValues.telefono}
-                  onChange={handleChange}
+                  onChange={manejar_cambio}
                 />
               </div>
             </div>
@@ -211,7 +211,7 @@ export default function Register() {
                   name="correo"
                   maxLength={FIELD_LIMIT}
                   value={formValues.correo}
-                  onChange={handleChange}
+                  onChange={manejar_cambio}
                 />
               </div>
               <div>
@@ -239,7 +239,7 @@ export default function Register() {
                     name="contrasena"
                     maxLength={FIELD_LIMIT}
                     value={formValues.contrasena}
-                    onChange={handleChange}
+                    onChange={manejar_cambio}
                   />
                   <button
                     type="button"
@@ -279,7 +279,7 @@ export default function Register() {
                     name="confirmar"
                     maxLength={FIELD_LIMIT}
                     value={formValues.confirmar}
-                    onChange={handleChange}
+                    onChange={manejar_cambio}
                   />
                   <button
                     type="button"
@@ -368,7 +368,7 @@ export default function Register() {
           <div className="mt-6 text-xs text-slate-600">
             Ya tienes cuenta?{" "}
             <Link to="/login" className="font-semibold text-ocean">
-              Inicia sesion
+              Inicia sesión
             </Link>
           </div>
           </div>

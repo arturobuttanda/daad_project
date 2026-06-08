@@ -1,1 +1,1 @@
-from .similarity import build_product_profile, rank_similar_products, summarize_similarity_prices
+from .similitud import construir_perfil_producto, rankear_productos_similares, resumir_precios_similares

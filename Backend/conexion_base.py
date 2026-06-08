@@ -47,15 +47,15 @@ BASE_PRODUCT_COLUMNS = ["id_producto", "nombre", "categoria", "precio_actual"]
 OPTIONAL_PRODUCT_COLUMNS = ["marca", "stock", "precio_fabricacion", "fecha_caducidad", "imagen_url", "fecha_actualizacion"]
 
 
-class DatabaseNotFoundError(Exception):
+class BaseDatosNoEncontrada(Exception):
     pass
 
 
-class DatabaseConflictError(Exception):
+class ConflictoBaseDatosError(Exception):
     pass
 
 
-class DatabaseValidationError(Exception):
+class ValidacionBaseDatosError(Exception):
     pass
 
 
@@ -119,7 +119,7 @@ class OracleDB:
             wallet_password=WALLET_PASSWORD,
         )
 
-    def _fetch_product_columns(self) -> tuple[str, ...]:
+    def obtener_columnas_producto(self) -> tuple[str, ...]:
         if self._product_columns is None:
             with self.connect() as connection:
                 with connection.cursor() as cursor:
@@ -128,18 +128,18 @@ class OracleDB:
             self._product_columns = tuple(row[0].lower() for row in rows)
         return self._product_columns
 
-    def _build_product_select_columns(self) -> list[str]:
-        available = set(self._fetch_product_columns())
+    def construir_columnas_seleccion_producto(self) -> list[str]:
+        available = set(self.obtener_columnas_producto())
         columns = [column for column in BASE_PRODUCT_COLUMNS if column in available]
         for column in OPTIONAL_PRODUCT_COLUMNS:
             if column in available:
                 columns.append(column)
         return columns
 
-    def fetch_producto_by_id(self, product_id: str) -> Producto | None:
+    def consultar_producto_por_id(self, product_id: str) -> Producto | None:
         with self.connect() as connection:
             with connection.cursor() as cursor:
-                selected_columns = self._build_product_select_columns()
+                selected_columns = self.construir_columnas_seleccion_producto()
                 cursor.execute(
                     f"SELECT {', '.join(selected_columns)} FROM productos WHERE id_producto = :id_producto",
                     {"id_producto": product_id},
@@ -147,12 +147,12 @@ class OracleDB:
                 row = cursor.fetchone()
         if not row:
             return None
-        return Producto.from_row(row, selected_columns)
+        return Producto.desde_fila(row, selected_columns)
 
-    def list_productos(self, page: int, page_size: int) -> tuple[list[Producto], int]:
+    def listar_productos(self, page: int, page_size: int) -> tuple[list[Producto], int]:
         with self.connect() as connection:
             with connection.cursor() as cursor:
-                selected_columns = self._build_product_select_columns()
+                selected_columns = self.construir_columnas_seleccion_producto()
                 cursor.execute("SELECT COUNT(*) FROM productos")
                 total_items = int(cursor.fetchone()[0] or 0)
                 total_pages = max(1, (total_items + page_size - 1) // page_size) if total_items else 1
@@ -164,12 +164,13 @@ class OracleDB:
                     {"offset": offset, "page_size": page_size},
                 )
                 rows = cursor.fetchall()
-        return [Producto.from_row(row, selected_columns) for row in rows], total_items
+        return [Producto.desde_fila(row, selected_columns) for row in rows], total_items
 
-    def list_vendor_products(self, vendor_id: str, page: int, page_size: int) -> tuple[list[Producto], int]:
+
+    def listar_productos_vendedor(self, vendor_id: str, page: int, page_size: int) -> tuple[list[Producto], int]:
         with self.connect() as connection:
             with connection.cursor() as cursor:
-                selected_columns = self._build_product_select_columns()
+                selected_columns = self.construir_columnas_seleccion_producto()
                 selected_columns_sql = ", ".join(f"p.{column}" for column in selected_columns)
                 cursor.execute(
                     "SELECT COUNT(*) FROM productos p INNER JOIN producto_vendedor pv ON pv.id_producto = p.id_producto "
@@ -188,12 +189,12 @@ class OracleDB:
                     {"vendedor_id": vendor_id, "offset": offset, "page_size": page_size},
                 )
                 rows = cursor.fetchall()
-        return [Producto.from_row(row, selected_columns) for row in rows], total_items
+        return [Producto.desde_fila(row, selected_columns) for row in rows], total_items
 
-    def create_producto(self, producto: Producto, vendor_id: str | None = None) -> None:
+    def crear_producto(self, producto: Producto, vendor_id: str | None = None) -> None:
         with self.connect() as connection:
             with connection.cursor() as cursor:
-                selected_columns = self._build_product_select_columns()
+                selected_columns = self.construir_columnas_seleccion_producto()
                 insert_columns = [column for column in [
                     "id_producto", "nombre", "marca", "categoria", "precio_actual", "stock", "precio_fabricacion", "fecha_caducidad", "imagen_url"
                 ] if column in selected_columns]
@@ -208,15 +209,15 @@ class OracleDB:
                         {"id_vendedor": vendor_id},
                     )
                     if not cursor.fetchone():
-                        raise DatabaseNotFoundError("El vendedor no existe.")
+                        raise BaseDatosNoEncontrada("El vendedor no existe.")
                     cursor.execute(
                         "INSERT INTO producto_vendedor (id_producto, id_vendedor) VALUES (:id_producto, :id_vendedor)",
                         {"id_producto": producto.id_producto, "id_vendedor": vendor_id},
                     )
                 connection.commit()
 
-    def update_producto(self, product_id: str, producto: Producto, provided_fields: set[str] | None = None) -> None:
-        available = set(self._fetch_product_columns())
+    def actualizar_producto(self, product_id: str, producto: Producto, provided_fields: set[str] | None = None) -> None:
+        available = set(self.obtener_columnas_producto())
         assignments: list[str] = []
         values: dict[str, object | None] = {"id_producto": product_id}
         updates = {
@@ -239,24 +240,24 @@ class OracleDB:
         if "fecha_actualizacion" in available:
             assignments.append("fecha_actualizacion = CURRENT_TIMESTAMP")
         if not assignments:
-            raise DatabaseValidationError("La tabla de productos no permite actualizaciones en este momento.")
+            raise ValidacionBaseDatosError("La tabla de productos no permite actualizaciones en este momento.")
         sql = f"UPDATE productos SET {', '.join(assignments)} WHERE id_producto = :id_producto"
         with self.connect() as connection:
             with connection.cursor() as cursor:
                 cursor.execute(sql, values)
                 if cursor.rowcount == 0:
-                    raise DatabaseNotFoundError("El producto no existe.")
+                    raise BaseDatosNoEncontrada("El producto no existe.")
                 connection.commit()
 
-    def delete_producto(self, product_id: str) -> None:
+    def eliminar_producto(self, product_id: str) -> None:
         with self.connect() as connection:
             with connection.cursor() as cursor:
                 cursor.execute("DELETE FROM productos WHERE id_producto = :id_producto", {"id_producto": product_id})
                 if cursor.rowcount == 0:
-                    raise DatabaseNotFoundError("El producto no existe.")
+                    raise BaseDatosNoEncontrada("El producto no existe.")
                 connection.commit()
 
-    def fetch_product_vendor(self, product_id: str) -> dict[str, object | None] | None:
+    def obtener_vendedor_producto(self, product_id: str) -> dict[str, object | None] | None:
         with self.connect() as connection:
             with connection.cursor() as cursor:
                 cursor.execute(
@@ -276,9 +277,9 @@ class OracleDB:
             codigo_vendedor=row[5],
             especialidad=row[6],
         )
-        return vendedor.to_vendor_dict()
+        return vendedor.a_diccionario_vendedor()
 
-    def fetch_price_history(self, product_id: str, limit: int = 12) -> list[dict[str, object | None]]:
+    def obtener_historial_precios(self, product_id: str, limit: int = 12) -> list[dict[str, object | None]]:
         with self.connect() as connection:
             with connection.cursor() as cursor:
                 cursor.execute(
@@ -297,7 +298,7 @@ class OracleDB:
             for fecha, precio in reversed(rows)
         ]
 
-    def fetch_competition_average(self, product_id: str) -> float | None:
+    def obtener_promedio_competencia(self, product_id: str) -> float | None:
         with self.connect() as connection:
             with connection.cursor() as cursor:
                 cursor.execute(
@@ -309,7 +310,7 @@ class OracleDB:
             return None
         return float(row[0])
 
-    def fetch_similarity_catalog_signature(self) -> tuple[int, str]:
+    def obtener_firma_catalogo_similitud(self) -> tuple[int, str]:
         with self.connect() as connection:
             with connection.cursor() as cursor:
                 cursor.execute("SELECT COUNT(*), MAX(fecha_actualizacion) FROM productos")
@@ -318,7 +319,7 @@ class OracleDB:
         latest_update = row[1].isoformat() if row and row[1] else ""
         return total_items, latest_update
 
-    def load_similarity_catalog(self, signature: tuple[int, str]) -> list[dict[str, object | None]]:
+    def cargar_catalogo_similitud(self, signature: tuple[int, str]) -> list[dict[str, object | None]]:
         with self.connect() as connection:
             with connection.cursor() as cursor:
                 catalog_columns = [
@@ -329,9 +330,9 @@ class OracleDB:
                     "SELECT id_producto, nombre, marca, categoria, precio_actual, stock, precio_fabricacion, fecha_actualizacion FROM productos ORDER BY nombre ASC"
                 )
                 rows = cursor.fetchall()
-        return [Producto.from_row(row, catalog_columns).to_dict() for row in rows]
+        return [Producto.desde_fila(row, catalog_columns).a_diccionario() for row in rows]
 
-    def fetch_persona_by_id(self, user_id: str) -> Persona | None:
+    def obtener_persona_por_id(self, user_id: str) -> Persona | None:
         with self.connect() as connection:
             with connection.cursor() as cursor:
                 cursor.execute(
@@ -341,9 +342,9 @@ class OracleDB:
                 row = cursor.fetchone()
         if not row:
             return None
-        return Persona.from_row(row)
+        return Persona.desde_fila_usuario(row)
 
-    def register_user(self, persona: Persona) -> Persona:
+    def registrar_usuario(self, persona: Persona) -> Persona:
         with self.connect() as connection:
             with connection.cursor() as cursor:
                 cursor.execute(
@@ -351,8 +352,8 @@ class OracleDB:
                     {"correo": persona.correo, "tipo_usuario": persona.tipo_usuario},
                 )
                 if cursor.fetchone():
-                    raise DatabaseConflictError("El correo ya esta registrado para ese rol.")
-                persona_values = persona.to_row()
+                    raise ConflictoBaseDatosError("El correo ya esta registrado para ese rol.")
+                persona_values = persona.a_fila()
                 allowed_keys = {"id_usuario", "nombre", "telefono", "correo", "tipo_usuario", "password_hash"}
                 insert_values = {key: persona_values[key] for key in allowed_keys if key in persona_values}
                 cursor.execute(
@@ -374,7 +375,7 @@ class OracleDB:
                 connection.commit()
         return persona
 
-    def update_user_profile(self, persona: Persona, password_hash: str | None = None) -> Persona:
+    def actualizar_perfil_usuario(self, persona: Persona, password_hash: str | None = None) -> Persona:
         update_parts: list[str] = []
         params: dict[str, object | None] = {"id_usuario": persona.id}
         if persona.nombre:
@@ -384,23 +385,23 @@ class OracleDB:
             update_parts.append("password_hash = :password_hash")
             params["password_hash"] = password_hash
         if not update_parts:
-            raise DatabaseValidationError("No hay cambios para actualizar.")
+            raise ValidacionBaseDatosError("No hay cambios para actualizar.")
         with self.connect() as connection:
             with connection.cursor() as cursor:
                 cursor.execute("SELECT id_usuario FROM usuarios WHERE id_usuario = :id_usuario", {"id_usuario": persona.id})
                 if not cursor.fetchone():
-                    raise DatabaseNotFoundError("El usuario no existe.")
+                    raise BaseDatosNoEncontrada("El usuario no existe.")
                 cursor.execute(f"UPDATE usuarios SET {', '.join(update_parts)} WHERE id_usuario = :id_usuario", params)
                 connection.commit()
         return persona
 
-    def create_purchase(self, client_id: str, sale_vendor_id: str | None, items: list[dict[str, object]]) -> dict[str, object]:
+    def crear_compra(self, client_id: str, sale_vendor_id: str | None, items: list[dict[str, object]]) -> dict[str, object]:
         client_id = client_id.strip()
         vendor_id = sale_vendor_id.strip() if sale_vendor_id else None
         if not client_id:
-            raise DatabaseValidationError("El cliente es obligatorio.")
+            raise ValidacionBaseDatosError("El cliente es obligatorio.")
         if not items:
-            raise DatabaseValidationError("El carrito esta vacio.")
+            raise ValidacionBaseDatosError("El carrito esta vacio.")
 
         sale_id = str(os.urandom(16).hex())
         total_amount = 0.0
@@ -417,7 +418,7 @@ class OracleDB:
                 )
                 client_row = cursor.fetchone()
                 if not client_row:
-                    raise DatabaseNotFoundError("El cliente no existe.")
+                    raise BaseDatosNoEncontrada("El cliente no existe.")
                 cliente = crear_usuario_desde_fila_usuario(client_row)
 
                 if vendor_id:
@@ -429,7 +430,7 @@ class OracleDB:
                     )
                     vendor_row = cursor.fetchone()
                     if not vendor_row:
-                        raise DatabaseNotFoundError("El vendedor no existe.")
+                        raise BaseDatosNoEncontrada("El vendedor no existe.")
                     vendedor = crear_usuario_desde_fila_usuario(vendor_row)
 
                 cursor.execute(
@@ -442,7 +443,7 @@ class OracleDB:
                     product_id = str(item["id_producto"]).strip().upper()
                     quantity = int(item["cantidad"])
                     if quantity <= 0:
-                        raise DatabaseValidationError("La cantidad debe ser mayor a cero.")
+                        raise ValidacionBaseDatosError("La cantidad debe ser mayor a cero.")
 
                     cursor.execute(
                         "SELECT p.nombre, p.marca, p.precio_actual, p.stock, p.precio_fabricacion, pv.id_vendedor "
@@ -453,7 +454,7 @@ class OracleDB:
                     )
                     product_row = cursor.fetchone()
                     if not product_row:
-                        raise DatabaseNotFoundError(f"El producto {product_id} no existe.")
+                        raise BaseDatosNoEncontrada(f"El producto {product_id} no existe.")
 
                     product_name, product_brand, price_actual, current_stock, product_cost, product_vendor_id = product_row
                     current_stock = int(current_stock or 0)
@@ -526,7 +527,7 @@ class OracleDB:
             "items": ticket_items,
         }
 
-    def list_client_purchases(self, client_id: str, start_date: datetime | None, page: int, page_size: int) -> tuple[list[dict[str, object | None]], int]:
+    def listar_compras_cliente(self, client_id: str, start_date: datetime | None, page: int, page_size: int) -> tuple[list[dict[str, object | None]], int]:
         filters = ["v.id_cliente = :id_cliente"]
         parameters: dict[str, object] = {"id_cliente": client_id}
         if start_date:
@@ -593,7 +594,7 @@ class OracleDB:
             )
         return items, total_items
 
-    def list_vendor_purchases(self, vendor_id: str, start_date: datetime | None, page: int, page_size: int) -> tuple[list[dict[str, object | None]], int]:
+    def listar_compras_vendedor(self, vendor_id: str, start_date: datetime | None, page: int, page_size: int) -> tuple[list[dict[str, object | None]], int]:
         filters = ["v.id_vendedor = :id_vendedor"]
         parameters: dict[str, object] = {"id_vendedor": vendor_id}
         if start_date:
@@ -664,7 +665,7 @@ class OracleDB:
             )
         return items, total_items
 
-    def get_client_purchase_ticket(self, sale_id: str) -> dict[str, object | None]:
+    def obtener_ticket_compra_cliente(self, sale_id: str) -> dict[str, object | None]:
         with self.connect() as connection:
             with connection.cursor() as cursor:
                 cursor.execute(
@@ -679,7 +680,7 @@ class OracleDB:
                 )
                 header = cursor.fetchone()
                 if not header:
-                    raise DatabaseNotFoundError("La venta no existe.")
+                    raise BaseDatosNoEncontrada("La venta no existe.")
                 cursor.execute(
                     "SELECT d.id_producto, p.nombre, p.marca, d.cantidad, d.precio_unitario, d.subtotal, d.costo_unitario, d.margen_unitario "
                     "FROM venta_detalle d "
@@ -716,7 +717,7 @@ class OracleDB:
             ],
         }
 
-    def get_financial_indicators(self) -> dict[str, object]:
+    def obtener_indicadores_financieros(self) -> dict[str, object]:
         with self.connect() as connection:
             with connection.cursor() as cursor:
                 cursor.execute("SELECT COUNT(*) FROM productos")
@@ -751,5 +752,6 @@ class OracleDB:
             "avg_ticket": avg_ticket,
         }
 
+    
 
 db = OracleDB()

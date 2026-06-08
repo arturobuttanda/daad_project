@@ -1,6 +1,6 @@
 const getStorageKey = (userId) => `client_cart_${userId || "guest"}`;
 
-export function getClientCart(userId) {
+export function obtener_carrito_cliente(userId) {
   if (typeof window === "undefined") {
     return [];
   }
@@ -16,15 +16,15 @@ export function getClientCart(userId) {
   }
 }
 
-export function setClientCart(userId, items) {
+export function establecer_carrito_cliente(userId, items) {
   if (typeof window === "undefined") {
     return;
   }
   window.localStorage.setItem(getStorageKey(userId), JSON.stringify(items));
 }
 
-export function addClientCartItem(userId, product, quantity = 1) {
-  const cart = getClientCart(userId);
+export function agregar_item_carrito_cliente(userId, product, quantity = 1) {
+  const cart = obtener_carrito_cliente(userId);
   const index = cart.findIndex((item) => item.id_producto === product.id_producto);
   if (index >= 0) {
     cart[index] = {
@@ -40,22 +40,22 @@ export function addClientCartItem(userId, product, quantity = 1) {
       quantity,
     });
   }
-  setClientCart(userId, cart);
+  establecer_carrito_cliente(userId, cart);
   return cart;
 }
 
-export function updateClientCartItem(userId, productId, quantity) {
-  const cart = getClientCart(userId)
+export function actualizar_item_carrito_cliente(userId, productId, quantity) {
+  const cart = obtener_carrito_cliente(userId)
     .map((item) =>
       item.id_producto === productId
         ? { ...item, quantity }
         : item
     )
     .filter((item) => item.quantity > 0);
-  setClientCart(userId, cart);
+  establecer_carrito_cliente(userId, cart);
   return cart;
 }
 
-export function clearClientCart(userId) {
-  setClientCart(userId, []);
+export function vaciar_carrito_cliente(userId) {
+  establecer_carrito_cliente(userId, []);
 }

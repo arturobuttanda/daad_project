@@ -1,14 +1,14 @@
 import { useEffect, useMemo, useState } from "react";
 import toast from "react-hot-toast";
 import { Link, useLocation, useNavigate } from "react-router-dom";
-import DashboardChartPanel from "../components/DashboardChartPanel.jsx";
-import VendorShell from "../components/VendorShell.jsx";
-import { addNotification } from "../utils/notificationEvents.js";
+import PanelGraficoDashboard from "../components/PanelGraficoDashboard.jsx";
+import ShellVendedor from "../components/ShellVendedor.jsx";
+import { agregar_notificacion } from "../utils/notificationEvents.js";
 
-const API_URL = import.meta.env.VITE_API_URL || "http://localhost:8000";
-const PAGE_SIZE = 20;
+const URL_API = import.meta.env.VITE_API_URL || "http://localhost:8000";
+const TAMANO_PAGINA = 20;
 
-const initialForm = {
+const formularioInicial = {
   id_producto: "",
   nombre: "",
   marca: "",
@@ -20,211 +20,211 @@ const initialForm = {
   imagen_url: "",
 };
 
-const money = new Intl.NumberFormat("es-MX", {
+const formatoDinero = new Intl.NumberFormat("es-MX", {
   style: "currency",
   currency: "MXN",
   maximumFractionDigits: 2,
 });
 
-function formatMoney(value) {
-  if (value === null || value === undefined || value === "") {
+function formatearDinero(valor) {
+  if (valor === null || valor === undefined || valor === "") {
     return "—";
   }
-  return money.format(Number(value));
+  return formatoDinero.format(Number(valor));
 }
 
-function normalizeApiValue(value) {
-  return value === null || value === undefined ? "" : String(value);
+function normalizarValorApi(valor) {
+  return valor === null || valor === undefined ? "" : String(valor);
 }
 
-function toFormValues(product) {
+function convertirAValoresFormulario(producto) {
   return {
-    id_producto: normalizeApiValue(product.id_producto),
-    nombre: normalizeApiValue(product.nombre),
-    marca: normalizeApiValue(product.marca),
-    categoria: normalizeApiValue(product.categoria),
-    precio_actual: normalizeApiValue(product.precio_actual),
-    stock: normalizeApiValue(product.stock ?? 0),
-    precio_fabricacion: normalizeApiValue(product.precio_fabricacion),
-    fecha_caducidad: normalizeApiValue(product.fecha_caducidad),
-    imagen_url: normalizeApiValue(product.imagen_url),
+    id_producto: normalizarValorApi(producto.id_producto),
+    nombre: normalizarValorApi(producto.nombre),
+    marca: normalizarValorApi(producto.marca),
+    categoria: normalizarValorApi(producto.categoria),
+    precio_actual: normalizarValorApi(producto.precio_actual),
+    stock: normalizarValorApi(producto.stock ?? 0),
+    precio_fabricacion: normalizarValorApi(producto.precio_fabricacion),
+    fecha_caducidad: normalizarValorApi(producto.fecha_caducidad),
+    imagen_url: normalizarValorApi(producto.imagen_url),
   };
 }
 
-function cleanText(value) {
-  const trimmed = value.trim();
-  return trimmed.length > 0 ? trimmed : null;
+function limpiarTexto(valor) {
+  const recortado = valor.trim();
+  return recortado.length > 0 ? recortado : null;
 }
 
-export default function VendorDashboard() {
-  const location = useLocation();
-  const navigate = useNavigate();
-  const [products, setProducts] = useState([]);
-  const [formValues, setFormValues] = useState(initialForm);
-  const [editingId, setEditingId] = useState(null);
-  const [isProductModalOpen, setIsProductModalOpen] = useState(false);
-  const [isLoading, setIsLoading] = useState(false);
-  const [isSubmitting, setIsSubmitting] = useState(false);
-  const [currentPage, setCurrentPage] = useState(1);
-  const [totalPages, setTotalPages] = useState(1);
-  const [totalItems, setTotalItems] = useState(0);
-  const [priceRecommendation, setPriceRecommendation] = useState(null);
-  const [isPriceRecommendationLoading, setIsPriceRecommendationLoading] = useState(false);
-  const vendorId = localStorage.getItem("userId");
+export default function PanelVendedor() {
+  const ubicacion = useLocation();
+  const navegar = useNavigate();
+  const [productos, setProductos] = useState([]);
+  const [valoresFormulario, setValoresFormulario] = useState(formularioInicial);
+  const [idEditando, setIdEditando] = useState(null);
+  const [modalProductoAbierto, setModalProductoAbierto] = useState(false);
+  const [cargando, setCargando] = useState(false);
+  const [enviando, setEnviando] = useState(false);
+  const [paginaActual, setPaginaActual] = useState(1);
+  const [totalPaginas, setTotalPaginas] = useState(1);
+  const [totalElementos, setTotalElementos] = useState(0);
+  const [recomendacionPrecio, setRecomendacionPrecio] = useState(null);
+  const [cargandoRecomendacion, setCargandoRecomendacion] = useState(false);
+  const idVendedor = localStorage.getItem("userId");
 
-  const loadProducts = async (page = 1) => {
-    if (!vendorId) {
+  const cargarProductos = async (pagina = 1) => {
+    if (!idVendedor) {
       toast.error("No se pudo identificar al vendedor.");
       return;
     }
-    setIsLoading(true);
+    setCargando(true);
     try {
-      const response = await fetch(
-        `${API_URL}/api/vendedor/productos?vendedor_id=${encodeURIComponent(vendorId)}&page=${page}&page_size=${PAGE_SIZE}`
+      const respuesta = await fetch(
+        `${URL_API}/api/vendedor/productos?vendedor_id=${encodeURIComponent(idVendedor)}&page=${pagina}&page_size=${TAMANO_PAGINA}`
       );
-      const data = await response.json().catch(() => []);
-      if (!response.ok) {
-        throw new Error(data.detail || "No se pudieron obtener los productos del vendedor.");
+      const datos = await respuesta.json().catch(() => []);
+      if (!respuesta.ok) {
+        throw new Error(datos.detail || "No se pudieron obtener los productos del vendedor.");
       }
-      const items = Array.isArray(data.items) ? data.items : [];
-      setProducts(items);
-      setCurrentPage(Number(data.page || page));
-      setTotalPages(Number(data.total_pages || 1));
-      setTotalItems(Number(data.total_items || 0));
+      const elementos = Array.isArray(datos.items) ? datos.items : [];
+      setProductos(elementos);
+      setPaginaActual(Number(datos.page || pagina));
+      setTotalPaginas(Number(datos.total_pages || 1));
+      setTotalElementos(Number(datos.total_items || 0));
     } catch (error) {
       toast.error(error.message || "No se pudieron obtener los productos del vendedor.");
     } finally {
-      setIsLoading(false);
+      setCargando(false);
     }
   };
 
   useEffect(() => {
-    loadProducts();
+    cargarProductos();
   }, []);
 
   useEffect(() => {
-    if (location.hash === "#add-product") {
-      setIsProductModalOpen(true);
+    if (ubicacion.hash === "#add-product") {
+      setModalProductoAbierto(true);
     }
-  }, [location.hash]);
+  }, [ubicacion.hash]);
 
   useEffect(() => {
-    if (!isProductModalOpen) {
-      setPriceRecommendation(null);
+    if (!modalProductoAbierto) {
+      setRecomendacionPrecio(null);
       return;
     }
 
-    const productId = formValues.id_producto.trim().toUpperCase();
-    const nombre = formValues.nombre.trim();
-    if (!productId || !nombre) {
-      setPriceRecommendation(null);
+    const idProducto = valoresFormulario.id_producto.trim().toUpperCase();
+    const nombre = valoresFormulario.nombre.trim();
+    if (!idProducto || !nombre) {
+      setRecomendacionPrecio(null);
       return;
     }
 
-    const controller = new AbortController();
-    const timerId = window.setTimeout(async () => {
-      setIsPriceRecommendationLoading(true);
+    const controlador = new AbortController();
+    const idTemporizador = window.setTimeout(async () => {
+      setCargandoRecomendacion(true);
       try {
-        const response = await fetch(`${API_URL}/api/productos/recomendacion-precio`, {
+        const respuesta = await fetch(`${URL_API}/api/productos/recomendacion-precio`, {
           method: "POST",
           headers: {
             "Content-Type": "application/json",
           },
-          signal: controller.signal,
+          signal: controlador.signal,
           body: JSON.stringify({
-            id_producto: productId,
+            id_producto: idProducto,
             nombre,
-            marca: cleanText(formValues.marca),
-            categoria: cleanText(formValues.categoria),
-            precio_actual: formValues.precio_actual === "" ? null : Number(formValues.precio_actual),
-            stock: formValues.stock === "" ? 0 : Number(formValues.stock),
-            precio_fabricacion: formValues.precio_fabricacion === "" ? null : Number(formValues.precio_fabricacion),
-            fecha_caducidad: formValues.fecha_caducidad || null,
-            imagen_url: cleanText(formValues.imagen_url),
+            marca: limpiarTexto(valoresFormulario.marca),
+            categoria: limpiarTexto(valoresFormulario.categoria),
+            precio_actual: valoresFormulario.precio_actual === "" ? null : Number(valoresFormulario.precio_actual),
+            stock: valoresFormulario.stock === "" ? 0 : Number(valoresFormulario.stock),
+            precio_fabricacion: valoresFormulario.precio_fabricacion === "" ? null : Number(valoresFormulario.precio_fabricacion),
+            fecha_caducidad: valoresFormulario.fecha_caducidad || null,
+            imagen_url: limpiarTexto(valoresFormulario.imagen_url),
           }),
         });
-        const data = await response.json().catch(() => ({}));
-        if (!response.ok) {
-          throw new Error(data.detail || "No se pudo calcular la recomendación de precio.");
+        const datos = await respuesta.json().catch(() => ({}));
+        if (!respuesta.ok) {
+          throw new Error(datos.detail || "No se pudo calcular la recomendación de precio.");
         }
-        setPriceRecommendation(data);
+        setRecomendacionPrecio(datos);
       } catch (error) {
         if (error.name !== "AbortError") {
-          setPriceRecommendation(null);
+          setRecomendacionPrecio(null);
         }
       } finally {
-        setIsPriceRecommendationLoading(false);
+        setCargandoRecomendacion(false);
       }
     }, 450);
 
     return () => {
-      window.clearTimeout(timerId);
-      controller.abort();
+      window.clearTimeout(idTemporizador);
+      controlador.abort();
     };
   }, [
-    isProductModalOpen,
-    formValues.id_producto,
-    formValues.nombre,
-    formValues.marca,
-    formValues.categoria,
-    formValues.precio_actual,
-    formValues.stock,
-    formValues.precio_fabricacion,
-    formValues.fecha_caducidad,
-    formValues.imagen_url,
+    modalProductoAbierto,
+    valoresFormulario.id_producto,
+    valoresFormulario.nombre,
+    valoresFormulario.marca,
+    valoresFormulario.categoria,
+    valoresFormulario.precio_actual,
+    valoresFormulario.stock,
+    valoresFormulario.precio_fabricacion,
+    valoresFormulario.fecha_caducidad,
+    valoresFormulario.imagen_url,
   ]);
 
-  const stats = useMemo(() => {
-    const stockBajo = products.filter((product) => Number(product.stock || 0) < 10).length;
-    const conCosto = products.filter(
-      (product) => product.precio_fabricacion !== null && product.precio_fabricacion !== undefined
+  const estadisticas = useMemo(() => {
+    const stockBajo = productos.filter((producto) => Number(producto.stock || 0) < 10).length;
+    const conCosto = productos.filter(
+      (producto) => producto.precio_fabricacion !== null && producto.precio_fabricacion !== undefined
     ).length;
-    const conCaducidad = products.filter((product) => product.fecha_caducidad).length;
+    const conCaducidad = productos.filter((producto) => producto.fecha_caducidad).length;
 
     return [
-      { label: "Productos", value: totalItems },
-      { label: "Stock bajo", value: stockBajo },
-      { label: "Con costo", value: conCosto },
-      { label: "Con caducidad", value: conCaducidad },
+      { etiqueta: "Productos", valor: totalElementos },
+      { etiqueta: "Stock bajo", valor: stockBajo },
+      { etiqueta: "Con costo", valor: conCosto },
+      { etiqueta: "Con caducidad", valor: conCaducidad },
     ];
-  }, [products, totalItems]);
+  }, [productos, totalElementos]);
 
-  const chartOptions = useMemo(() => {
-    const categoryMap = new Map();
-    const stockBuckets = [
+  const opcionesGrafico = useMemo(() => {
+    const mapaCategorias = new Map();
+    const rangoStock = [
       { label: "0-4", value: 0 },
       { label: "5-9", value: 0 },
       { label: "10-19", value: 0 },
       { label: "20+", value: 0 },
     ];
 
-    const sortedPrices = [...products]
-      .map((product) => ({
-        label: product.nombre ? String(product.nombre).slice(0, 14) : product.id_producto,
-        value: Number(product.precio_actual || 0),
+    const preciosOrdenados = [...productos]
+      .map((producto) => ({
+        label: producto.nombre ? String(producto.nombre).slice(0, 14) : producto.id_producto,
+        value: Number(producto.precio_actual || 0),
       }))
-      .sort((left, right) => right.value - left.value)
+      .sort((izq, der) => der.value - izq.value)
       .slice(0, 8)
       .reverse();
 
-    for (const product of products) {
-      const category = String(product.categoria || "Sin categoria").trim() || "Sin categoria";
-      categoryMap.set(category, (categoryMap.get(category) || 0) + 1);
+    for (const producto of productos) {
+      const categoria = String(producto.categoria || "Sin categoria").trim() || "Sin categoria";
+      mapaCategorias.set(categoria, (mapaCategorias.get(categoria) || 0) + 1);
 
-      const stock = Number(product.stock || 0);
+      const stock = Number(producto.stock || 0);
       if (stock <= 4) {
-        stockBuckets[0].value += 1;
+        rangoStock[0].value += 1;
       } else if (stock <= 9) {
-        stockBuckets[1].value += 1;
+        rangoStock[1].value += 1;
       } else if (stock <= 19) {
-        stockBuckets[2].value += 1;
+        rangoStock[2].value += 1;
       } else {
-        stockBuckets[3].value += 1;
+        rangoStock[3].value += 1;
       }
     }
 
-    const categoryEntries = Array.from(categoryMap.entries())
-      .sort((left, right) => right[1] - left[1])
+    const entradasCategorias = Array.from(mapaCategorias.entries())
+      .sort((izq, der) => der[1] - izq[1])
       .slice(0, 8);
 
     return [
@@ -233,8 +233,8 @@ export default function VendorDashboard() {
         label: "Grafico de barras por categoria",
         kind: "bar",
         description: "Muestra en que categorias se concentra mas inventario. Es util para decidir que familias ampliar o depurar.",
-        labels: categoryEntries.map(([category]) => category),
-        values: categoryEntries.map(([, count]) => count),
+        labels: entradasCategorias.map(([categoria]) => categoria),
+        values: entradasCategorias.map(([, conteo]) => conteo),
         unitLabel: "productos",
         insights: [
           "Sirve para comparar volumen por familia.",
@@ -246,8 +246,8 @@ export default function VendorDashboard() {
         label: "Histograma de stock",
         kind: "histogram",
         description: "Agrupa el inventario por rangos de stock. Es util para identificar agotados, riesgo y productos holgados.",
-        labels: stockBuckets.map((bucket) => bucket.label),
-        values: stockBuckets.map((bucket) => bucket.value),
+        labels: rangoStock.map((rango) => rango.label),
+        values: rangoStock.map((rango) => rango.value),
         insights: [
           "Destaca si hay muchos productos en stock muy bajo.",
           "Ayuda a planear reposiciones por lote.",
@@ -258,8 +258,8 @@ export default function VendorDashboard() {
         label: "Grafico de lineas de precios",
         kind: "line",
         description: "Ordena los productos por precio para ver la curva del catalogo y detectar saltos o segmentos premium.",
-        labels: sortedPrices.map((item) => item.label),
-        values: sortedPrices.map((item) => item.value),
+        labels: preciosOrdenados.map((elemento) => elemento.label),
+        values: preciosOrdenados.map((elemento) => elemento.value),
         unitLabel: "MXN",
         insights: [
           "Es util para comparar productos caros y economicos en una misma vista.",
@@ -272,9 +272,9 @@ export default function VendorDashboard() {
         kind: "donut",
         description: "Resume el estado del inventario entre stock bajo, medio y alto para visualizar la salud general del catalogo.",
         slices: [
-          { label: "Stock bajo (0-4)", value: stockBuckets[0].value, color: "#F26B5B" },
-          { label: "Stock medio (5-19)", value: stockBuckets[1].value + stockBuckets[2].value, color: "#3C9BE8" },
-          { label: "Stock alto (20+)", value: stockBuckets[3].value, color: "#5CC49D" },
+          { label: "Stock bajo (0-4)", value: rangoStock[0].value, color: "#F26B5B" },
+          { label: "Stock medio (5-19)", value: rangoStock[1].value + rangoStock[2].value, color: "#3C9BE8" },
+          { label: "Stock alto (20+)", value: rangoStock[3].value, color: "#5CC49D" },
         ],
         insights: [
           "Resume el inventario en una sola lectura.",
@@ -282,111 +282,111 @@ export default function VendorDashboard() {
         ],
       },
     ];
-  }, [products]);
+  }, [productos]);
 
-  const handleChange = (event) => {
-    const { name, value } = event.target;
-    const nextValue = name === "id_producto" ? value.toUpperCase() : value;
-    setFormValues((current) => ({
-      ...current,
-      [name]: nextValue,
+  const manejar_cambio = (evento) => {
+    const { name, value } = evento.target;
+    const siguienteValor = name === "id_producto" ? value.toUpperCase() : value;
+    setValoresFormulario((actual) => ({
+      ...actual,
+      [name]: siguienteValor,
     }));
   };
 
-  const handleImageFileChange = (event) => {
-    const file = event.target.files?.[0];
-    if (!file) {
+  const manejar_cambio_archivo_imagen = (evento) => {
+    const archivo = evento.target.files?.[0];
+    if (!archivo) {
       return;
     }
 
-    const reader = new FileReader();
-    reader.onload = () => {
-      setFormValues((current) => ({
-        ...current,
-        imagen_url: String(reader.result || ""),
+    const lector = new FileReader();
+    lector.onload = () => {
+      setValoresFormulario((actual) => ({
+        ...actual,
+        imagen_url: String(lector.result || ""),
       }));
     };
-    reader.onerror = () => {
+    lector.onerror = () => {
       toast.error("No se pudo leer la imagen seleccionada.");
     };
-    reader.readAsDataURL(file);
-    event.target.value = "";
+    lector.readAsDataURL(archivo);
+    evento.target.value = "";
   };
 
-  const clearForm = () => {
-    setFormValues(initialForm);
-    setEditingId(null);
+  const limpiar_formulario = () => {
+    setValoresFormulario(formularioInicial);
+    setIdEditando(null);
   };
 
-  const openNewProductModal = () => {
-    setFormValues(initialForm);
-    setEditingId(null);
-    setIsProductModalOpen(true);
-    if (location.hash !== "#add-product") {
-      navigate({ pathname: location.pathname, hash: "add-product" }, { replace: false });
+  const abrir_modal_nuevo_producto = () => {
+    setValoresFormulario(formularioInicial);
+    setIdEditando(null);
+    setModalProductoAbierto(true);
+    if (ubicacion.hash !== "#add-product") {
+      navegar({ pathname: ubicacion.pathname, hash: "add-product" }, { replace: false });
     }
   };
 
-  const closeProductModal = () => {
-    clearForm();
-    setIsProductModalOpen(false);
-    if (location.hash === "#add-product") {
-      navigate({ pathname: location.pathname }, { replace: true });
+  const cerrar_modal_producto = () => {
+    limpiar_formulario();
+    setModalProductoAbierto(false);
+    if (ubicacion.hash === "#add-product") {
+      navegar({ pathname: ubicacion.pathname }, { replace: true });
     }
   };
 
-  const handleEdit = (product) => {
-    setEditingId(product.id_producto);
-    setFormValues(toFormValues(product));
-    setIsProductModalOpen(true);
+  const manejar_edicion = (producto) => {
+    setIdEditando(producto.id_producto);
+    setValoresFormulario(convertirAValoresFormulario(producto));
+    setModalProductoAbierto(true);
   };
 
-  const handleDelete = async (productId) => {
-    const product = products.find((item) => item.id_producto === productId);
-    const confirmed = window.confirm("¿Deseas eliminar este producto?");
-    if (!confirmed) {
+  const manejar_eliminar = async (idProducto) => {
+    const producto = productos.find((elemento) => elemento.id_producto === idProducto);
+    const confirmado = window.confirm("¿Deseas eliminar este producto?");
+    if (!confirmado) {
       return;
     }
 
     try {
-      const response = await fetch(`${API_URL}/api/productos/${encodeURIComponent(productId)}`, {
+      const respuesta = await fetch(`${URL_API}/api/productos/${encodeURIComponent(idProducto)}`, {
         method: "DELETE",
       });
-      const data = await response.json().catch(() => ({}));
-      if (!response.ok) {
-        throw new Error(data.detail || "No se pudo eliminar el producto.");
+      const datos = await respuesta.json().catch(() => ({}));
+      if (!respuesta.ok) {
+        throw new Error(datos.detail || "No se pudo eliminar el producto.");
       }
-      toast.success(data.detail || "Producto eliminado correctamente.");
-      addNotification({
+      toast.success(datos.detail || "Producto eliminado correctamente.");
+      agregar_notificacion({
         kind: "product-delete",
         title: "Producto eliminado",
-        detail: `${product?.nombre || productId} fue retirado del inventario.`,
+        detail: `${producto?.nombre || idProducto} fue retirado del inventario.`,
         source: "Inventario",
       });
-      if (editingId === productId) {
-        closeProductModal();
+      if (idEditando === idProducto) {
+        cerrar_modal_producto();
       }
-      await loadProducts(currentPage);
+      await cargarProductos(paginaActual);
     } catch (error) {
       toast.error(error.message || "No se pudo eliminar el producto.");
     }
   };
 
-  const handleSubmit = async (event) => {
-    event.preventDefault();
-    if (isSubmitting) {
+  const manejar_envio = async (evento) => {
+    evento.preventDefault();
+    if (enviando) {
       return;
     }
 
-    const productId = formValues.id_producto.trim().toUpperCase();
-    const nombre = formValues.nombre.trim();
-    const precioActual = formValues.precio_actual === "" ? null : Number(formValues.precio_actual);
-    const stock = formValues.stock === "" ? 0 : Number(formValues.stock);
-    const precioFabricacion = formValues.precio_fabricacion === "" ? null : Number(formValues.precio_fabricacion);
-    const fechaCaducidad = formValues.fecha_caducidad || null;
-    const imagenUrl = cleanText(formValues.imagen_url);
+    const idProducto = valoresFormulario.id_producto.trim().toUpperCase();
+    const nombre = valoresFormulario.nombre.trim();
+    const precioActual = valoresFormulario.precio_actual === "" ? null : Number(valoresFormulario.precio_actual);
+    const stock = valoresFormulario.stock === "" ? 0 : Number(valoresFormulario.stock);
+    const precioFabricacion = valoresFormulario.precio_fabricacion === "" ? null : Number(valoresFormulario.precio_fabricacion);
+    const fechaCaducidad = valoresFormulario.fecha_caducidad || null;
+    const imagenUrl = limpiarTexto(valoresFormulario.imagen_url);
 
-    if (!productId || !nombre) {
+    if (!idProducto || !nombre) {
       toast.error("El id y el nombre del producto son obligatorios.");
       return;
     }
@@ -403,11 +403,11 @@ export default function VendorDashboard() {
       return;
     }
 
-    const payload = {
-      id_producto: productId,
+    const carga = {
+      id_producto: idProducto,
       nombre,
-      marca: cleanText(formValues.marca),
-      categoria: cleanText(formValues.categoria),
+      marca: limpiarTexto(valoresFormulario.marca),
+      categoria: limpiarTexto(valoresFormulario.categoria),
       precio_actual: precioActual,
       stock,
       precio_fabricacion: precioFabricacion,
@@ -415,42 +415,42 @@ export default function VendorDashboard() {
       imagen_url: imagenUrl,
     };
 
-    setIsSubmitting(true);
+    setEnviando(true);
     try {
-      const response = await fetch(
-        editingId
-          ? `${API_URL}/api/productos/${encodeURIComponent(editingId)}`
-          : `${API_URL}/api/productos`,
+      const respuesta = await fetch(
+        idEditando
+          ? `${URL_API}/api/productos/${encodeURIComponent(idEditando)}`
+          : `${URL_API}/api/productos`,
         {
-          method: editingId ? "PUT" : "POST",
+          method: idEditando ? "PUT" : "POST",
           headers: {
             "Content-Type": "application/json",
           },
-          body: JSON.stringify(payload),
+          body: JSON.stringify(carga),
         }
       );
-      const data = await response.json().catch(() => ({}));
-      if (!response.ok) {
-        throw new Error(data.detail || "No se pudo guardar el producto.");
+      const datos = await respuesta.json().catch(() => ({}));
+      if (!respuesta.ok) {
+        throw new Error(datos.detail || "No se pudo guardar el producto.");
       }
-      toast.success(editingId ? "Producto actualizado correctamente." : "Producto creado correctamente.");
-      addNotification({
-        kind: editingId ? "product-update" : "product-create",
-        title: editingId ? "Producto actualizado" : "Producto agregado",
-        detail: `${payload.nombre} ya forma parte del catalogo activo.`,
+      toast.success(idEditando ? "Producto actualizado correctamente." : "Producto creado correctamente.");
+      agregar_notificacion({
+        kind: idEditando ? "product-update" : "product-create",
+        title: idEditando ? "Producto actualizado" : "Producto agregado",
+        detail: `${carga.nombre} ya forma parte del catalogo activo.`,
         source: "Inventario",
       });
-      closeProductModal();
-      await loadProducts(currentPage);
+      cerrar_modal_producto();
+      await cargarProductos(paginaActual);
     } catch (error) {
       toast.error(error.message || "No se pudo guardar el producto.");
     } finally {
-      setIsSubmitting(false);
+      setEnviando(false);
     }
   };
 
   return (
-    <VendorShell
+    <ShellVendedor
       title="Gestión de productos"
       subtitle="Crea, edita, consulta y elimina productos desde Oracle. El primer acceso del vendedor se centra en este módulo."
     >
@@ -466,33 +466,33 @@ export default function VendorDashboard() {
             </p>
           </div>
           <div className="flex flex-wrap gap-2">
-            <button type="button" onClick={openNewProductModal} className="primary-button">
-              Add product
+            <button type="button" onClick={abrir_modal_nuevo_producto} className="primary-button">
+              Agregar producto
             </button>
-            <button type="button" onClick={() => loadProducts(currentPage)} className="secondary-button">
+            <button type="button" onClick={() => cargarProductos(paginaActual)} className="secondary-button">
               Recargar
             </button>
           </div>
         </div>
 
         <div className="mt-6 grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
-          {stats.map((stat) => (
-            <div key={stat.label} className="rounded-2xl border border-sand bg-white/70 p-4">
+          {estadisticas.map((estadistica) => (
+            <div key={estadistica.etiqueta} className="rounded-2xl border border-sand bg-white/70 p-4">
               <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
-                {stat.label}
+                {estadistica.etiqueta}
               </p>
               <p className="mt-2 font-display text-2xl font-semibold text-ink">
-                {stat.value}
+                {estadistica.valor}
               </p>
             </div>
           ))}
         </div>
       </section>
 
-      <DashboardChartPanel
+      <PanelGraficoDashboard
         title="Explora el inventario con distintos graficos"
         description="Elige barras, histograma, lineas o dona segun el tipo de dato que quieras leer. Cada opcion muestra una lectura distinta del catalogo activo."
-        options={chartOptions}
+        options={opcionesGrafico}
         defaultKey="categories"
       />
 
@@ -513,7 +513,7 @@ export default function VendorDashboard() {
             </p>
           </div>
           <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
-            {isLoading ? "Cargando..." : `${totalItems} registros`}
+            {cargando ? "Cargando..." : `${totalElementos} registros`}
           </p>
         </div>
 
@@ -534,37 +534,37 @@ export default function VendorDashboard() {
               </tr>
             </thead>
             <tbody className="text-slate-700">
-              {products.map((product) => (
-                <tr key={product.id_producto} className="border-t border-sand align-top">
-                  <td className="py-3 font-semibold text-ink">{product.id_producto}</td>
+              {productos.map((producto) => (
+                <tr key={producto.id_producto} className="border-t border-sand align-top">
+                  <td className="py-3 font-semibold text-ink">{producto.id_producto}</td>
                   <td className="py-3">
-                    <div className="font-semibold text-ink">{product.nombre}</div>
+                    <div className="font-semibold text-ink">{producto.nombre}</div>
                   </td>
-                  <td className="py-3">{product.marca || "—"}</td>
-                  <td className="py-3">{product.categoria || "—"}</td>
-                  <td className="py-3">{formatMoney(product.precio_actual)}</td>
+                  <td className="py-3">{producto.marca || "—"}</td>
+                  <td className="py-3">{producto.categoria || "—"}</td>
+                  <td className="py-3">{formatearDinero(producto.precio_actual)}</td>
                   <td className="py-3">
                     <div className="flex items-center gap-2">
-                      <span>{product.stock ?? 0}</span>
-                      {Number(product.stock || 0) < 10 ? (
+                      <span>{producto.stock ?? 0}</span>
+                      {Number(producto.stock || 0) < 10 ? (
                         <span className="rounded-full bg-[rgba(242,107,91,0.15)] px-2 py-1 text-[10px] font-semibold uppercase text-copper">
                           Stock bajo
                         </span>
                       ) : null}
                     </div>
                   </td>
-                  <td className="py-3">{formatMoney(product.precio_fabricacion)}</td>
-                  <td className="py-3">{product.fecha_caducidad || "—"}</td>
-                  <td className="py-3">{product.fecha_actualizacion || "—"}</td>
+                  <td className="py-3">{formatearDinero(producto.precio_fabricacion)}</td>
+                  <td className="py-3">{producto.fecha_caducidad || "—"}</td>
+                  <td className="py-3">{producto.fecha_actualizacion || "—"}</td>
                   <td className="py-3">
                     <div className="flex flex-wrap gap-2">
-                      <button type="button" className="secondary-button" onClick={() => handleEdit(product)}>
+                      <button type="button" className="secondary-button" onClick={() => manejar_edicion(producto)}>
                         Editar
                       </button>
                       <button
                         type="button"
                         className="rounded-2xl border border-copper px-4 py-2 text-xs font-semibold text-copper transition hover:bg-[rgba(242,107,91,0.08)]"
-                        onClick={() => handleDelete(product.id_producto)}
+                        onClick={() => manejar_eliminar(producto.id_producto)}
                       >
                         Eliminar
                       </button>
@@ -572,7 +572,7 @@ export default function VendorDashboard() {
                   </td>
                 </tr>
               ))}
-              {!isLoading && products.length === 0 ? (
+              {!cargando && productos.length === 0 ? (
                 <tr>
                   <td colSpan="10" className="py-8 text-center text-sm text-slate-500">
                     No hay productos registrados todavía.
@@ -585,22 +585,22 @@ export default function VendorDashboard() {
 
         <div className="mt-6 flex flex-col gap-3 border-t border-sand pt-4 sm:flex-row sm:items-center sm:justify-between">
           <p className="text-sm text-slate-600">
-            Página {currentPage} de {totalPages} · {PAGE_SIZE} productos por vista
+            Página {paginaActual} de {totalPaginas} · {TAMANO_PAGINA} productos por vista
           </p>
           <div className="flex flex-wrap gap-2">
             <button
               type="button"
               className="secondary-button disabled:cursor-not-allowed disabled:opacity-50"
-              disabled={isLoading || currentPage <= 1}
-              onClick={() => loadProducts(currentPage - 1)}
+              disabled={cargando || paginaActual <= 1}
+              onClick={() => cargarProductos(paginaActual - 1)}
             >
               Anterior
             </button>
             <button
               type="button"
               className="secondary-button disabled:cursor-not-allowed disabled:opacity-50"
-              disabled={isLoading || currentPage >= totalPages}
-              onClick={() => loadProducts(currentPage + 1)}
+              disabled={cargando || paginaActual >= totalPaginas}
+              onClick={() => cargarProductos(paginaActual + 1)}
             >
               Siguiente
             </button>
@@ -608,28 +608,28 @@ export default function VendorDashboard() {
         </div>
       </section>
 
-      {isProductModalOpen ? (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/40 px-4 py-6 backdrop-blur-sm" onClick={closeProductModal}>
+      {modalProductoAbierto ? (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/40 px-4 py-6 backdrop-blur-sm" onClick={cerrar_modal_producto}>
           <div
             className="max-h-[92vh] w-full max-w-5xl overflow-y-auto rounded-[32px] border border-sand bg-white p-6 shadow-[0_30px_80px_rgba(11,27,43,0.25)]"
-            onClick={(event) => event.stopPropagation()}
+            onClick={(evento) => evento.stopPropagation()}
           >
             <div className="flex flex-wrap items-start justify-between gap-4">
               <div>
-                <p className="tag">{editingId ? "Editar producto" : "Nuevo producto"}</p>
+                <p className="tag">{idEditando ? "Editar producto" : "Nuevo producto"}</p>
                 <h3 className="mt-3 font-display text-2xl font-semibold text-ink">
-                  {editingId ? "Actualizar producto" : "Agregar producto"}
+                  {idEditando ? "Actualizar producto" : "Agregar producto"}
                 </h3>
                 <p className="mt-2 max-w-2xl text-sm text-slate-600">
                   Captura los datos del producto desde esta ventana. Puedes pegar una URL de imagen o cargar una imagen para convertirla en un enlace base64.
                 </p>
               </div>
-              <button type="button" onClick={closeProductModal} className="secondary-button">
+              <button type="button" onClick={cerrar_modal_producto} className="secondary-button">
                 Cerrar
               </button>
             </div>
 
-            <form className="mt-6 grid gap-5" onSubmit={handleSubmit}>
+            <form className="mt-6 grid gap-5" onSubmit={manejar_envio}>
               <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
                 <div>
                   <label className="text-xs font-semibold uppercase tracking-wide text-slate-600">
@@ -638,13 +638,13 @@ export default function VendorDashboard() {
                   <input
                     type="text"
                     name="id_producto"
-                    value={formValues.id_producto}
-                    onChange={handleChange}
+                    value={valoresFormulario.id_producto}
+                    onChange={manejar_cambio}
                     className="input-field mt-2"
                     placeholder="P-0001"
                     maxLength={20}
                     required
-                    disabled={Boolean(editingId)}
+                    disabled={Boolean(idEditando)}
                   />
                 </div>
                 <div className="xl:col-span-2">
@@ -654,8 +654,8 @@ export default function VendorDashboard() {
                   <input
                     type="text"
                     name="nombre"
-                    value={formValues.nombre}
-                    onChange={handleChange}
+                    value={valoresFormulario.nombre}
+                    onChange={manejar_cambio}
                     className="input-field mt-2"
                     placeholder="Nombre del producto"
                     maxLength={1000}
@@ -669,8 +669,8 @@ export default function VendorDashboard() {
                   <input
                     type="text"
                     name="marca"
-                    value={formValues.marca}
-                    onChange={handleChange}
+                    value={valoresFormulario.marca}
+                    onChange={manejar_cambio}
                     className="input-field mt-2"
                     placeholder="Marca"
                     maxLength={150}
@@ -683,8 +683,8 @@ export default function VendorDashboard() {
                   <input
                     type="text"
                     name="categoria"
-                    value={formValues.categoria}
-                    onChange={handleChange}
+                    value={valoresFormulario.categoria}
+                    onChange={manejar_cambio}
                     className="input-field mt-2"
                     placeholder="Categoria"
                     maxLength={100}
@@ -697,8 +697,8 @@ export default function VendorDashboard() {
                   <input
                     type="number"
                     name="precio_actual"
-                    value={formValues.precio_actual}
-                    onChange={handleChange}
+                    value={valoresFormulario.precio_actual}
+                    onChange={manejar_cambio}
                     className="input-field mt-2"
                     placeholder="0.00"
                     min="0"
@@ -713,8 +713,8 @@ export default function VendorDashboard() {
                   <input
                     type="number"
                     name="stock"
-                    value={formValues.stock}
-                    onChange={handleChange}
+                    value={valoresFormulario.stock}
+                    onChange={manejar_cambio}
                     className="input-field mt-2"
                     placeholder="0"
                     min="0"
@@ -729,8 +729,8 @@ export default function VendorDashboard() {
                   <input
                     type="number"
                     name="precio_fabricacion"
-                    value={formValues.precio_fabricacion}
-                    onChange={handleChange}
+                    value={valoresFormulario.precio_fabricacion}
+                    onChange={manejar_cambio}
                     className="input-field mt-2"
                     placeholder="0.00"
                     min="0"
@@ -744,8 +744,8 @@ export default function VendorDashboard() {
                   <input
                     type="date"
                     name="fecha_caducidad"
-                    value={formValues.fecha_caducidad}
-                    onChange={handleChange}
+                    value={valoresFormulario.fecha_caducidad}
+                    onChange={manejar_cambio}
                     className="input-field mt-2"
                   />
                 </div>
@@ -760,8 +760,8 @@ export default function VendorDashboard() {
                     <input
                       type="url"
                       name="imagen_url"
-                      value={formValues.imagen_url}
-                      onChange={handleChange}
+                      value={valoresFormulario.imagen_url}
+                      onChange={manejar_cambio}
                       className="input-field mt-2"
                       placeholder="https://..."
                     />
@@ -773,7 +773,7 @@ export default function VendorDashboard() {
                     <input
                       type="file"
                       accept="image/*"
-                      onChange={handleImageFileChange}
+                      onChange={manejar_cambio_archivo_imagen}
                       className="input-field mt-2 pt-2"
                     />
                   </div>
@@ -782,10 +782,10 @@ export default function VendorDashboard() {
                       Vista previa
                     </label>
                     <div className="mt-2 flex min-h-[180px] items-center justify-center overflow-hidden rounded-2xl border border-dashed border-[#BFC9DE] bg-[#F8FAFF] p-3">
-                      {formValues.imagen_url ? (
+                      {valoresFormulario.imagen_url ? (
                         <img
-                          src={formValues.imagen_url}
-                          alt={formValues.nombre || "Vista previa del producto"}
+                          src={valoresFormulario.imagen_url}
+                          alt={valoresFormulario.nombre || "Vista previa del producto"}
                           className="max-h-[160px] w-full rounded-xl object-contain"
                         />
                       ) : (
@@ -799,40 +799,40 @@ export default function VendorDashboard() {
                   <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
                     Recomendación de precio
                   </p>
-                  {isPriceRecommendationLoading ? (
+                  {cargandoRecomendacion ? (
                     <p className="mt-2 text-sm text-slate-600">Calculando precio sugerido...</p>
-                  ) : priceRecommendation ? (
+                  ) : recomendacionPrecio ? (
                     <div className="mt-3 space-y-3 text-sm text-slate-600">
                       <div className="rounded-2xl border border-white/80 bg-white p-3">
                         <p className="text-xs uppercase tracking-wide text-slate-500">Precio sugerido</p>
                         <p className="mt-1 text-2xl font-semibold text-ink">
-                          {formatMoney(priceRecommendation.suggested_price)}
+                          {formatearDinero(recomendacionPrecio.suggested_price)}
                         </p>
-                        <p className="mt-2 text-xs text-slate-500">{priceRecommendation.reason}</p>
+                        <p className="mt-2 text-xs text-slate-500">{recomendacionPrecio.reason}</p>
                       </div>
                       <div className="grid gap-3 sm:grid-cols-2">
                         <div className="rounded-2xl border border-white/80 bg-white p-3">
                           <p className="text-xs uppercase tracking-wide text-slate-500">Mercado comparable</p>
                           <p className="mt-1 font-semibold text-ink">
-                            {formatMoney(priceRecommendation.market_reference_price)}
+                            {formatearDinero(recomendacionPrecio.market_reference_price)}
                           </p>
                         </div>
                         <div className="rounded-2xl border border-white/80 bg-white p-3">
                           <p className="text-xs uppercase tracking-wide text-slate-500">Compra recomendada</p>
                           <p className="mt-1 font-semibold text-ink">
-                            {priceRecommendation.buy_now ? "Sí, es competitivo" : "Conviene revisar"}
+                            {recomendacionPrecio.buy_now ? "Sí, es competitivo" : "Conviene revisar"}
                           </p>
                         </div>
                       </div>
-                      {Array.isArray(priceRecommendation.similar_products) && priceRecommendation.similar_products.length > 0 ? (
+                      {Array.isArray(recomendacionPrecio.similar_products) && recomendacionPrecio.similar_products.length > 0 ? (
                         <div className="rounded-2xl border border-white/80 bg-white p-3">
                           <p className="text-xs uppercase tracking-wide text-slate-500">Similares detectados</p>
                           <div className="mt-2 space-y-2">
-                            {priceRecommendation.similar_products.slice(0, 3).map((item) => (
-                              <div key={item.id_producto} className="rounded-xl bg-[#F8FAFF] px-3 py-2">
-                                <p className="font-medium text-ink">{item.nombre || item.id_producto}</p>
+                            {recomendacionPrecio.similar_products.slice(0, 3).map((elemento) => (
+                              <div key={elemento.id_producto} className="rounded-xl bg-[#F8FAFF] px-3 py-2">
+                                <p className="font-medium text-ink">{elemento.nombre || elemento.id_producto}</p>
                                 <p className="text-xs text-slate-500">
-                                  {formatMoney(item.precio_actual)} · similitud {(Number(item.similarity_score || 0) * 100).toFixed(1)}%
+                                  {formatearDinero(elemento.precio_actual)} · similitud {(Number(elemento.similarity_score || 0) * 100).toFixed(1)}%
                                 </p>
                               </div>
                             ))}
@@ -852,17 +852,17 @@ export default function VendorDashboard() {
                 <button
                   type="submit"
                   className="primary-button disabled:cursor-not-allowed disabled:opacity-60"
-                  disabled={isSubmitting}
+                  disabled={enviando}
                 >
-                  {isSubmitting
-                    ? editingId
+                  {enviando
+                    ? idEditando
                       ? "Actualizando..."
                       : "Creando..."
-                    : editingId
+                    : idEditando
                     ? "Actualizar producto"
                     : "Crear producto"}
                 </button>
-                <button type="button" onClick={clearForm} className="secondary-button">
+                <button type="button" onClick={limpiar_formulario} className="secondary-button">
                   Limpiar formulario
                 </button>
               </div>
@@ -870,6 +870,6 @@ export default function VendorDashboard() {
           </div>
         </div>
       ) : null}
-    </VendorShell>
+    </ShellVendedor>
   );
 }

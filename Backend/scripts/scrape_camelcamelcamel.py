@@ -110,7 +110,7 @@ def human_pause(cfg: ScrapeConfig) -> None:
     time.sleep(random.uniform(cfg.delay_min, cfg.delay_max))
 
 
-def parse_us_price(text: str | None) -> float | None:
+def parsear_precio_us(text: str | None) -> float | None:
     if not text:
         return None
     m = re.search(r"([\d,]+\.?\d*)", text.replace("$", "").replace(",", ""))
@@ -122,24 +122,24 @@ def parse_us_price(text: str | None) -> float | None:
         return None
 
 
-def parse_month_date(month: str, day: str, year: str) -> date:
+def parsear_fecha_mes(month: str, day: str, year: str) -> date:
     return datetime.strptime(f"{month} {day} {year}", "%b %d %Y").date()
 
 
-def is_cloudflare_challenge(html: str, title: str = "") -> bool:
+def es_challenge_cloudflare(html: str, title: str = "") -> bool:
     blob = (title + html).lower()
     return "just a moment" in blob or "cf-chl" in blob or "checking your browser" in blob
 
 
-def _cffi_session():
+def _sesion_cffi():
     from curl_cffi import requests as cffi_requests
 
     return cffi_requests
 
 
-def fetch_html_tls(url: str, max_retries: int = 3) -> str:
+def obtener_html_tls(url: str, max_retries: int = 3) -> str:
     """HTTP con curl_cffi (impersonate Chrome) con reintentos y backoff exponencial."""
-    cffi = _cffi_session()
+    cffi = _sesion_cffi()
     backoff_delays = [10, 30, 60]  # segundos de espera entre reintentos
     last_exc: Exception | None = None
 
@@ -149,7 +149,7 @@ def fetch_html_tls(url: str, max_retries: int = 3) -> str:
             if resp.status_code == 403:
                 raise RuntimeError(f"HTTP 403 Forbidden en {url}")
             resp.raise_for_status()
-            if is_cloudflare_challenge(resp.text):
+            if es_challenge_cloudflare(resp.text):
                 raise RuntimeError(f"Cloudflare activo en {url}")
             return resp.text
         except Exception as exc:
@@ -167,9 +167,9 @@ def fetch_html_tls(url: str, max_retries: int = 3) -> str:
     raise last_exc  # type: ignore[misc]
 
 
-def fetch_bytes_tls(url: str, max_retries: int = 3) -> bytes:
+def obtener_bytes_tls(url: str, max_retries: int = 3) -> bytes:
     """Descarga binaria con curl_cffi con reintentos y backoff exponencial."""
-    cffi = _cffi_session()
+    cffi = _sesion_cffi()
     backoff_delays = [10, 30, 60]
     last_exc: Exception | None = None
 
@@ -195,7 +195,7 @@ def fetch_bytes_tls(url: str, max_retries: int = 3) -> bytes:
     raise last_exc  # type: ignore[misc]
 
 
-def fetch_html(
+def obtener_html(
     context: BrowserContext | None,
     page: Page | None,
     url: str,
@@ -204,22 +204,22 @@ def fetch_html(
     """Obtiene HTML: APIRequest de Playwright y, si hace falta, curl_cffi (TLS)."""
     if cfg.tls_only or context is None:
         log.debug("TLS: %s", url)
-        return fetch_html_tls(url)
+        return obtener_html_tls(url)
 
     try:
         resp = context.request.get(url, timeout=min(cfg.timeout_ms, 45_000))
-        if resp.ok and not is_cloudflare_challenge(resp.text()):
+        if resp.ok and not es_challenge_cloudflare(resp.text()):
             return resp.text()
     except Exception as exc:
         log.debug("Playwright request falló para %s: %s", url, exc)
 
     log.info("Respaldo TLS (curl_cffi): %s", url)
-    return fetch_html_tls(url)
+    return obtener_html_tls(url)
 
 
-def fetch_bytes(url: str, context: BrowserContext | None, cfg: ScrapeConfig) -> bytes:
+def obtener_bytes(url: str, context: BrowserContext | None, cfg: ScrapeConfig) -> bytes:
     if cfg.tls_only or context is None:
-        return fetch_bytes_tls(url)
+        return obtener_bytes_tls(url)
 
     try:
         resp = context.request.get(url, timeout=cfg.timeout_ms)
@@ -231,7 +231,7 @@ def fetch_bytes(url: str, context: BrowserContext | None, cfg: ScrapeConfig) -> 
         log.debug("Playwright bytes falló para %s: %s", url, exc)
 
     log.debug("Respaldo TLS para binario: %s", url)
-    return fetch_bytes_tls(url)
+    return obtener_bytes_tls(url)
 
 
 def bootstrap_cloudflare_cookies(context: BrowserContext) -> None:
@@ -270,7 +270,7 @@ def wait_for_real_page(page: Page, cfg: ScrapeConfig) -> bool:
     while time.time() < deadline:
         title = page.title()
         html = page.content()
-        if not is_cloudflare_challenge(html, title):
+        if not es_challenge_cloudflare(html, title):
             if "camelcamelcamel" in page.url and (
                 "/popular" in page.url
                 or "/top_drops" in page.url
@@ -288,7 +288,7 @@ def wait_for_real_page(page: Page, cfg: ScrapeConfig) -> bool:
 # ---------------------------------------------------------------------------
 
 
-def parse_listing_products(html: str, source: str) -> list[ProductStub]:
+def parsear_productos_listado(html: str, source: str) -> list[ProductStub]:
     soup = BeautifulSoup(html, "lxml")
     found: dict[str, ProductStub] = {}
 
@@ -310,7 +310,7 @@ def parse_listing_products(html: str, source: str) -> list[ProductStub]:
         if parent:
             pm = re.search(r"\$\s*([\d,]+\.?\d*)", parent.get_text(" ", strip=True))
             if pm:
-                precio = parse_us_price(pm.group(0))
+                precio = parsear_precio_us(pm.group(0))
 
         if asin not in found or len(nombre) > len(found[asin].nombre):
             found[asin] = ProductStub(
@@ -323,7 +323,7 @@ def parse_listing_products(html: str, source: str) -> list[ProductStub]:
     return list(found.values())
 
 
-def discover_products(
+def descubrir_productos(
     page: Page | None, context: BrowserContext | None, cfg: ScrapeConfig
 ) -> list[ProductStub]:
     collected: dict[str, ProductStub] = {}
@@ -335,9 +335,9 @@ def discover_products(
                 break
             url = urljoin(BASE_URL, path_tpl.format(page=page_num))
             log.info("Listado %s (página %s)", source, page_num)
-            html = fetch_html(context, page, url, cfg)
+            html = obtener_html(context, page, url, cfg)
             human_pause(cfg)
-            for stub in parse_listing_products(html, source):
+            for stub in parsear_productos_listado(html, source):
                 if stub.asin not in collected:
                     collected[stub.asin] = stub
                 if len(collected) >= cfg.limit:
@@ -354,7 +354,7 @@ def discover_products(
 # ---------------------------------------------------------------------------
 
 
-def parse_product_metadata(html: str, asin: str) -> tuple[str, str, float | None, date | None, float | None, float | None]:
+def parsear_metadata_producto(html: str, asin: str) -> tuple[str, str, float | None, date | None, float | None, float | None]:
     """nombre, categoría, precio actual, fecha inicio tracking, min amazon, max amazon."""
     soup = BeautifulSoup(html, "lxml")
 
@@ -378,9 +378,9 @@ def parse_product_metadata(html: str, asin: str) -> tuple[str, str, float | None
             continue
         # Current+ suele ser la 4ª columna
         if len(cells) >= 4:
-            precio_actual = parse_us_price(cells[3])
-        min_amazon = parse_us_price(cells[1])
-        max_amazon = parse_us_price(cells[2])
+            precio_actual = parsear_precio_us(cells[3])
+        min_amazon = parsear_precio_us(cells[1])
+        max_amazon = parsear_precio_us(cells[2])
         break
 
     tracking_start = None
@@ -388,13 +388,13 @@ def parse_product_metadata(html: str, asin: str) -> tuple[str, str, float | None
         text = p.get_text(" ", strip=True)
         m = MONITORING_SINCE_RE.search(text)
         if m:
-            tracking_start = parse_month_date(m.group(1), m.group(2), m.group(3))
+            tracking_start = parsear_fecha_mes(m.group(1), m.group(2), m.group(3))
             break
 
     return nombre, categoria, precio_actual, tracking_start, min_amazon, max_amazon
 
 
-def extract_points_from_summary_table(html: str) -> list[PricePoint]:
+def extraer_puntos_tabla_resumen(html: str) -> list[PricePoint]:
     """Puntos discretos de la tabla resumen (lowest/highest/current)."""
     soup = BeautifulSoup(html, "lxml")
     points: list[PricePoint] = []
@@ -407,15 +407,15 @@ def extract_points_from_summary_table(html: str) -> list[PricePoint]:
             price_m = re.search(r"\$\s*([\d,]+\.?\d*)", cell)
             if not price_m:
                 continue
-            precio = parse_us_price(price_m.group(0))
+            precio = parsear_precio_us(price_m.group(0))
             dm = MONTH_DATE_RE.search(cell)
             if precio is not None and dm:
-                d = parse_month_date(dm.group(1), dm.group(2), dm.group(3))
+                d = parsear_fecha_mes(dm.group(1), dm.group(2), dm.group(3))
                 points.append(PricePoint(d, precio))
     return points
 
 
-def extract_points_from_raw_table(html: str) -> list[PricePoint]:
+def extraer_puntos_tabla_bruta(html: str) -> list[PricePoint]:
     """Tabla en bruto bajo la gráfica (si existe): columnas fecha + precio."""
     soup = BeautifulSoup(html, "lxml")
     points: list[PricePoint] = []
@@ -443,12 +443,12 @@ def extract_points_from_raw_table(html: str) -> list[PricePoint]:
             dm = MONTH_DATE_RE.search(cells[date_idx]) or re.search(
                 r"(\d{4}-\d{2}-\d{2})", cells[date_idx]
             )
-            precio = parse_us_price(cells[price_idx])
+            precio = parsear_precio_us(cells[price_idx])
             if not precio:
                 continue
             if dm:
                 if dm.lastindex == 3:
-                    d = parse_month_date(dm.group(1), dm.group(2), dm.group(3))
+                    d = parsear_fecha_mes(dm.group(1), dm.group(2), dm.group(3))
                 else:
                     d = datetime.strptime(dm.group(1), "%Y-%m-%d").date()
                 points.append(PricePoint(d, precio))
@@ -456,7 +456,7 @@ def extract_points_from_raw_table(html: str) -> list[PricePoint]:
     return points
 
 
-def try_parse_network_payload(body: bytes, content_type: str) -> list[PricePoint]:
+def intentar_parsear_payload_red(body: bytes, content_type: str) -> list[PricePoint]:
     points: list[PricePoint] = []
     text = body.decode("utf-8", errors="ignore").strip()
     if not text:
@@ -469,7 +469,7 @@ def try_parse_network_payload(body: bytes, content_type: str) -> list[PricePoint
         except json.JSONDecodeError:
             payload = None
     elif "csv" in content_type or text.count(",") > 3:
-        return parse_csv_points(text)
+        return parsear_puntos_csv(text)
 
     if payload is None:
         # series Flot: [[ts_ms, price], ...]
@@ -503,7 +503,7 @@ def try_parse_network_payload(body: bytes, content_type: str) -> list[PricePoint
     return points
 
 
-def parse_csv_points(text: str) -> list[PricePoint]:
+def parsear_puntos_csv(text: str) -> list[PricePoint]:
     points: list[PricePoint] = []
     for line in text.splitlines():
         if not line.strip() or line.lower().startswith("date"):
@@ -511,18 +511,18 @@ def parse_csv_points(text: str) -> list[PricePoint]:
         parts = [p.strip() for p in re.split(r"[,;\t]", line) if p.strip()]
         if len(parts) < 2:
             continue
-        precio = parse_us_price(parts[-1])
+        precio = parsear_precio_us(parts[-1])
         dm = MONTH_DATE_RE.search(line) or re.search(r"(\d{4}-\d{2}-\d{2})", line)
         if precio and dm:
             if dm.lastindex == 3:
-                d = parse_month_date(dm.group(1), dm.group(2), dm.group(3))
+                d = parsear_fecha_mes(dm.group(1), dm.group(2), dm.group(3))
             else:
                 d = datetime.strptime(dm.group(1), "%Y-%m-%d").date()
             points.append(PricePoint(d, precio))
     return points
 
 
-def build_chart_png_url(
+def construir_url_grafico_png(
     asin: str, width: int = CHART_WIDTH, height: int = CHART_HEIGHT
 ) -> str:
     params = urlencode(
@@ -560,7 +560,7 @@ def _y_to_price(y: float, y_min: float, y_max: float, min_price: float, max_pric
     return max_price - (y - y_min) / max(y_max - y_min, 1) * price_span
 
 
-def sanitize_price_series(
+def sanear_serie_precios(
     points: list[PricePoint],
     min_price: float | None,
     max_price: float | None,
@@ -576,7 +576,7 @@ def sanitize_price_series(
     return cleaned if len(cleaned) >= 10 else points
 
 
-def extract_points_from_chart_png(
+def extraer_puntos_grafico_png(
     png_bytes: bytes,
     *,
     start: date,
@@ -630,7 +630,7 @@ def extract_points_from_chart_png(
     return [PricePoint(d, p) for d, p in sorted(by_date.items())]
 
 
-def merge_points(*series: list[PricePoint]) -> list[PricePoint]:
+def unir_puntos(*series: list[PricePoint]) -> list[PricePoint]:
     merged: dict[date, float] = {}
     for seq in series:
         for pt in seq:
@@ -638,14 +638,14 @@ def merge_points(*series: list[PricePoint]) -> list[PricePoint]:
     return [PricePoint(d, p) for d, p in sorted(merged.items())]
 
 
-def filter_history_window(points: list[PricePoint], start_date: date) -> list[PricePoint]:
+def filtrar_ventana_historial(points: list[PricePoint], start_date: date) -> list[PricePoint]:
     if not points:
         return []
     filtered = [p for p in points if p.fecha >= start_date]
     return filtered if filtered else sorted(points, key=lambda p: p.fecha)
 
 
-def format_daily_history(
+def formatear_historial_diario(
     points: list[PricePoint],
     start_date: date,
     *,
@@ -655,7 +655,7 @@ def format_daily_history(
     Serie diaria. Camelcamelcamel registra cambios de precio (escalones);
     con fill_gaps=True propaga el último precio conocido a cada día calendario.
     """
-    filtered = filter_history_window(points, start_date)
+    filtered = filtrar_ventana_historial(points, start_date)
     if not filtered:
         return []
 
@@ -683,8 +683,8 @@ def format_daily_history(
     return out
 
 
-def resample_weekly(points: list[PricePoint], start_date: date) -> list[dict[str, Any]]:
-    filtered = filter_history_window(points, start_date)
+def remuestrear_semanal(points: list[PricePoint], start_date: date) -> list[dict[str, Any]]:
+    filtered = filtrar_ventana_historial(points, start_date)
     if not filtered:
         return []
 
@@ -706,17 +706,17 @@ def resample_weekly(points: list[PricePoint], start_date: date) -> list[dict[str
     return weekly
 
 
-def format_history(points: list[PricePoint], cfg: ScrapeConfig) -> list[dict[str, Any]]:
+def formatear_historial(points: list[PricePoint], cfg: ScrapeConfig) -> list[dict[str, Any]]:
     if cfg.granularity == "weekly":
-        return resample_weekly(points, cfg.history_start_date)
-    return format_daily_history(
+        return remuestrear_semanal(points, cfg.history_start_date)
+    return formatear_historial_diario(
         points,
         cfg.history_start_date,
         fill_gaps=cfg.fill_daily_gaps,
     )
 
 
-def fetch_price_history(
+def obtener_historial_precios(
     page: Page | None,
     context: BrowserContext | None,
     product: ProductStub,
@@ -772,9 +772,9 @@ def fetch_price_history(
             log.debug("goto producto %s: %s", product.asin, exc)
 
     human_pause(cfg)
-    html = fetch_html(context, page, product_url, cfg)
+    html = obtener_html(context, page, product_url, cfg)
 
-    nombre, categoria, precio_tabla, tracking_start, min_p, max_p = parse_product_metadata(
+    nombre, categoria, precio_tabla, tracking_start, min_p, max_p = parsear_metadata_producto(
         html, product.asin
     )
     product.nombre = nombre or product.nombre
@@ -784,11 +784,11 @@ def fetch_price_history(
 
     network_pts: list[PricePoint] = []
     for body, ct in captured:
-        network_pts.extend(try_parse_network_payload(body, ct))
+        network_pts.extend(intentar_parsear_payload_red(body, ct))
 
-    table_pts = extract_points_from_raw_table(html)
-    summary_pts = extract_points_from_summary_table(html)
-    all_pts = merge_points(network_pts, table_pts, summary_pts)
+    table_pts = extraer_puntos_tabla_bruta(html)
+    summary_pts = extraer_puntos_tabla_resumen(html)
+    all_pts = unir_puntos(network_pts, table_pts, summary_pts)
 
     # Serie densa desde PNG Amazon (única fuente con granularidad diaria en camelcamelcamel)
     if cfg.use_chart_fallback:
@@ -803,17 +803,17 @@ def fetch_price_history(
             all_pts[0].fecha if all_pts else date.today() - timedelta(days=365 * 3)
         )
         end = date.today()
-        chart_url = build_chart_png_url(product.asin)
+        chart_url = construir_url_grafico_png(product.asin)
         try:
-            png_bytes = fetch_bytes(chart_url, context, cfg)
-            chart_pts = extract_points_from_chart_png(
+            png_bytes = obtener_bytes(chart_url, context, cfg)
+            chart_pts = extraer_puntos_grafico_png(
                 png_bytes,
                 start=start,
                 end=end,
                 min_price=bounds_min,
                 max_price=bounds_max,
             )
-            chart_pts = sanitize_price_series(chart_pts, min_p, max_p)
+            chart_pts = sanear_serie_precios(chart_pts, min_p, max_p)
             if chart_pts:
                 log.info(
                     "%s: %s puntos desde chart Amazon (tracking desde %s).",
@@ -824,15 +824,15 @@ def fetch_price_history(
                 if len(chart_pts) >= len(all_pts):
                     all_pts = chart_pts
                 else:
-                    all_pts = merge_points(all_pts, chart_pts)
+                    all_pts = unir_puntos(all_pts, chart_pts)
         except Exception as exc:
             log.warning("%s: fallo al descargar chart PNG: %s", product.asin, exc)
 
-    all_pts = sanitize_price_series(all_pts, min_p, max_p)
+    all_pts = sanear_serie_precios(all_pts, min_p, max_p)
     capture_active["on"] = False
 
     earliest = min((p.fecha for p in all_pts), default=None)
-    historial = format_history(all_pts, cfg)
+    historial = formatear_historial(all_pts, cfg)
     log.info(
         "%s: historial %s → %s registros.",
         product.asin,
@@ -858,7 +858,7 @@ O ejecute sin navegador (solo curl_cffi, suficiente para este scraper):
 """
 
 
-def _incremental_save(productos: list[dict[str, Any]], output: Path) -> None:
+def guardar_incremental(productos: list[dict[str, Any]], output: Path) -> None:
     """Guardado incremental para no perder progreso si el scraper falla."""
     partial_path = output.with_suffix(".partial.json")
     with partial_path.open("w", encoding="utf-8") as fh:
@@ -866,7 +866,7 @@ def _incremental_save(productos: list[dict[str, Any]], output: Path) -> None:
     log.info("Guardado incremental: %s productos en %s", len(productos), partial_path)
 
 
-def run_scraper_tls_only(cfg: ScrapeConfig) -> dict[str, Any]:
+def ejecutar_scraper_solo_tls(cfg: ScrapeConfig) -> dict[str, Any]:
     """Modo sin Chromium: útil en WSL si falta libnspr4/libnss3."""
     if cfg.init_session:
         raise RuntimeError("--init-session requiere navegador; omita --tls-only.")
@@ -876,11 +876,11 @@ def run_scraper_tls_only(cfg: ScrapeConfig) -> dict[str, Any]:
     productos: list[dict[str, Any]] = []
     skipped: list[str] = []
 
-    stubs = discover_products(None, None, cfg)
+    stubs = descubrir_productos(None, None, cfg)
     for idx, stub in enumerate(stubs, start=1):
         log.info("[%s/%s] Procesando %s", idx, len(stubs), stub.asin)
         try:
-            historial, earliest = fetch_price_history(None, None, stub, cfg)
+            historial, earliest = obtener_historial_precios(None, None, stub, cfg)
         except Exception as exc:
             log.error(
                 "[%s/%s] SALTANDO producto %s por error irrecuperable: %s",
@@ -922,7 +922,7 @@ def run_scraper_tls_only(cfg: ScrapeConfig) -> dict[str, Any]:
 
         # Guardado incremental cada 10 productos
         if len(productos) % 10 == 0:
-            _incremental_save(productos, cfg.output)
+            guardar_incremental(productos, cfg.output)
 
         human_pause(cfg)
 
@@ -934,9 +934,9 @@ def run_scraper_tls_only(cfg: ScrapeConfig) -> dict[str, Any]:
     return {"productos": productos}
 
 
-def run_scraper(cfg: ScrapeConfig) -> dict[str, Any]:
+def ejecutar_scraper(cfg: ScrapeConfig) -> dict[str, Any]:
     if cfg.tls_only:
-        return run_scraper_tls_only(cfg)
+        return ejecutar_scraper_solo_tls(cfg)
     cfg.profile_dir.mkdir(parents=True, exist_ok=True)
 
     productos: list[dict[str, Any]] = []
@@ -965,11 +965,11 @@ def run_scraper(cfg: ScrapeConfig) -> dict[str, Any]:
                 context.close()
                 return {"productos": []}
 
-        stubs = discover_products(page, context, cfg)
+        stubs = descubrir_productos(page, context, cfg)
 
         for idx, stub in enumerate(stubs, start=1):
             log.info("[%s/%s] Procesando %s", idx, len(stubs), stub.asin)
-            historial, earliest = fetch_price_history(page, context, stub, cfg)
+            historial, earliest = obtener_historial_precios(page, context, stub, cfg)
 
             if earliest and earliest > cfg.history_start_date:
                 print(
@@ -1007,7 +1007,7 @@ def run_scraper(cfg: ScrapeConfig) -> dict[str, Any]:
     return {"productos": productos}
 
 
-def build_parser() -> argparse.ArgumentParser:
+def construir_parser() -> argparse.ArgumentParser:
     p = argparse.ArgumentParser(
         description="Extrae productos populares e historial de precios desde camelcamelcamel.com"
     )
@@ -1084,7 +1084,7 @@ def build_parser() -> argparse.ArgumentParser:
 
 
 def main() -> int:
-    parser = build_parser()
+    parser = construir_parser()
     args = parser.parse_args()
 
     logging.basicConfig(
@@ -1111,7 +1111,7 @@ def main() -> int:
         parser.error("--delay-max debe ser >= --delay-min")
 
     try:
-        result = run_scraper(cfg)
+        result = ejecutar_scraper(cfg)
     except Exception as exc:
         err = f"{type(exc).__name__} {exc}".lower()
         if any(

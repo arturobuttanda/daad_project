@@ -1,17 +1,17 @@
-export const NOTIFICATION_CHANGE_EVENT = "notificationchange";
+export const EVENTO_CAMBIO_NOTIFICACION = "notificationchange";
 
 const STORAGE_KEY = "vendorActivityNotifications";
 const MAX_NOTIFICATIONS = 20;
 
-function emitChange() {
+function emitir_cambio() {
   if (typeof window === "undefined") {
     return;
   }
 
-  window.dispatchEvent(new Event(NOTIFICATION_CHANGE_EVENT));
+  window.dispatchEvent(new Event(EVENTO_CAMBIO_NOTIFICACION));
 }
 
-function getStorage() {
+function obtener_almacenamiento() {
   if (typeof window === "undefined") {
     return null;
   }
@@ -19,8 +19,8 @@ function getStorage() {
   return window.localStorage;
 }
 
-export function readNotifications() {
-  const storage = getStorage();
+export function leer_notificaciones() {
+  const storage = obtener_almacenamiento();
   if (!storage) {
     return [];
   }
@@ -38,8 +38,8 @@ export function readNotifications() {
   }
 }
 
-export function addNotification(notification) {
-  const storage = getStorage();
+export function agregar_notificacion(notification) {
+  const storage = obtener_almacenamiento();
   if (!storage) {
     return null;
   }
@@ -53,18 +53,18 @@ export function addNotification(notification) {
     createdAt: new Date().toISOString(),
   };
 
-  const nextNotifications = [nextNotification, ...readNotifications()].slice(0, MAX_NOTIFICATIONS);
+  const nextNotifications = [nextNotification, ...leer_notificaciones()].slice(0, MAX_NOTIFICATIONS);
   storage.setItem(STORAGE_KEY, JSON.stringify(nextNotifications));
-  emitChange();
+  emitir_cambio();
   return nextNotification;
 }
 
-export function clearNotifications() {
-  const storage = getStorage();
+export function limpiar_notificaciones() {
+  const storage = obtener_almacenamiento();
   if (!storage) {
     return;
   }
 
   storage.removeItem(STORAGE_KEY);
-  emitChange();
+  emitir_cambio();
 }

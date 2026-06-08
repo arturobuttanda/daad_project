@@ -1,21 +1,21 @@
 import { useEffect, useRef, useState } from "react";
 import { Link, useLocation } from "react-router-dom";
 import toast from "react-hot-toast";
-import { notifyAuthChange } from "../utils/authEvents.js";
-import { updateUserProfile } from "../utils/profileApi.js";
+import { notificar_cambio_autenticacion } from "../utils/authEvents.js";
+import { actualizar_perfil_usuario } from "../utils/profileApi.js";
 import {
-  NOTIFICATION_CHANGE_EVENT,
-  addNotification,
-  clearNotifications,
-  readNotifications,
+  EVENTO_CAMBIO_NOTIFICACION,
+  agregar_notificacion,
+  limpiar_notificaciones,
+  leer_notificaciones,
 } from "../utils/notificationEvents.js";
 
-const navItems = [
-  { to: "/cliente", label: "Marketplace", short: "MP", icon: MarketIcon },
-  { to: "/cliente/historial", label: "Orders", short: "OR", icon: OrdersIcon },
+const elementosNavegacion = [
+  { a: "/cliente", etiqueta: "Marketplace", corto: "MP", icono: IconoMercado },
+  { a: "/cliente/historial", etiqueta: "Pedidos", corto: "PE", icono: IconoPedidos },
 ];
 
-function MarketIcon({ className = "h-5 w-5" }) {
+function IconoMercado({ className = "h-5 w-5" }) {
   return (
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" className={className}>
       <path d="M4 7h16l-1.5 12h-13z" />
@@ -24,7 +24,7 @@ function MarketIcon({ className = "h-5 w-5" }) {
   );
 }
 
-function OrdersIcon({ className = "h-5 w-5" }) {
+function IconoPedidos({ className = "h-5 w-5" }) {
   return (
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" className={className}>
       <path d="M7 4h10l2 4v12H5V8z" />
@@ -34,7 +34,7 @@ function OrdersIcon({ className = "h-5 w-5" }) {
   );
 }
 
-function ProfileIcon({ className = "h-5 w-5" }) {
+function IconoPerfil({ className = "h-5 w-5" }) {
   return (
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" className={className}>
       <path d="M20 21a8 8 0 0 0-16 0" />
@@ -43,7 +43,7 @@ function ProfileIcon({ className = "h-5 w-5" }) {
   );
 }
 
-function BellIcon({ className = "h-5 w-5" }) {
+function IconoCampana({ className = "h-5 w-5" }) {
   return (
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" className={className}>
       <path d="M15 17H5l1.4-1.4A2 2 0 0 0 7 14.2V10a5 5 0 1 1 10 0v4.2a2 2 0 0 0 .6 1.4L19 17h-4" />
@@ -52,7 +52,7 @@ function BellIcon({ className = "h-5 w-5" }) {
   );
 }
 
-function LogoutIcon({ className = "h-5 w-5" }) {
+function IconoCerrarSesion({ className = "h-5 w-5" }) {
   return (
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" className={className}>
       <path d="M10 17l5-5-5-5" />
@@ -62,7 +62,7 @@ function LogoutIcon({ className = "h-5 w-5" }) {
   );
 }
 
-function ClockIcon({ className = "h-4 w-4" }) {
+function IconoReloj({ className = "h-4 w-4" }) {
   return (
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" className={className}>
       <circle cx="12" cy="12" r="9" />
@@ -71,7 +71,7 @@ function ClockIcon({ className = "h-4 w-4" }) {
   );
 }
 
-function ChevronLeftIcon({ className = "h-5 w-5" }) {
+function IconoChevronIzquierda({ className = "h-5 w-5" }) {
   return (
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" className={className}>
       <path d="M14 18l-6-6 6-6" />
@@ -79,7 +79,7 @@ function ChevronLeftIcon({ className = "h-5 w-5" }) {
   );
 }
 
-function ChevronRightIcon({ className = "h-5 w-5" }) {
+function IconoChevronDerecha({ className = "h-5 w-5" }) {
   return (
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" className={className}>
       <path d="M10 6l6 6-6 6" />
@@ -87,114 +87,114 @@ function ChevronRightIcon({ className = "h-5 w-5" }) {
   );
 }
 
-export default function ClientShell({ title, subtitle, children }) {
-  const shellRef = useRef(null);
-  const location = useLocation();
-  const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(() => localStorage.getItem("clientSidebarCollapsed") === "true");
-  const [activeMenu, setActiveMenu] = useState(null);
-  const [profileSection, setProfileSection] = useState("menu");
-  const [notifications, setNotifications] = useState(() => readNotifications());
-  const [profileForm, setProfileForm] = useState(() => ({
-    userName: localStorage.getItem("userName") || "",
-    password: "",
-    confirmPassword: "",
+export default function ShellCliente({ title, subtitle, children }) {
+  const refContenedor = useRef(null);
+  const ubicacion = useLocation();
+  const [barraColapsada, setBarraColapsada] = useState(() => localStorage.getItem("clientSidebarCollapsed") === "true");
+  const [menuActivo, setMenuActivo] = useState(null);
+  const [seccionPerfil, setSeccionPerfil] = useState("menu");
+  const [notificaciones, setNotificaciones] = useState(() => leer_notificaciones());
+  const [formularioPerfil, setFormularioPerfil] = useState(() => ({
+    nombreUsuario: localStorage.getItem("userName") || "",
+    contrasena: "",
+    confirmarContrasena: "",
   }));
-  const userName = profileForm.userName;
+  const nombreUsuario = formularioPerfil.nombreUsuario;
 
   useEffect(() => {
-    localStorage.setItem("clientSidebarCollapsed", String(isSidebarCollapsed));
-  }, [isSidebarCollapsed]);
+    localStorage.setItem("clientSidebarCollapsed", String(barraColapsada));
+  }, [barraColapsada]);
 
   useEffect(() => {
-    const syncNotifications = () => {
-      setNotifications(readNotifications());
+    const sincronizarNotificaciones = () => {
+      setNotificaciones(leer_notificaciones());
     };
 
-    const handlePointerDown = (event) => {
-      if (shellRef.current && !shellRef.current.contains(event.target)) {
-        setActiveMenu(null);
-        setProfileSection("menu");
+    const manejarClicFuera = (evento) => {
+      if (refContenedor.current && !refContenedor.current.contains(evento.target)) {
+        setMenuActivo(null);
+        setSeccionPerfil("menu");
       }
     };
 
-    const handleEscape = (event) => {
-      if (event.key === "Escape") {
-        setActiveMenu(null);
-        setProfileSection("menu");
+    const manejarEscape = (evento) => {
+      if (evento.key === "Escape") {
+        setMenuActivo(null);
+        setSeccionPerfil("menu");
       }
     };
 
-    window.addEventListener(NOTIFICATION_CHANGE_EVENT, syncNotifications);
-    document.addEventListener("mousedown", handlePointerDown);
-    document.addEventListener("keydown", handleEscape);
+    window.addEventListener(EVENTO_CAMBIO_NOTIFICACION, sincronizarNotificaciones);
+    document.addEventListener("mousedown", manejarClicFuera);
+    document.addEventListener("keydown", manejarEscape);
 
     return () => {
-      window.removeEventListener(NOTIFICATION_CHANGE_EVENT, syncNotifications);
-      document.removeEventListener("mousedown", handlePointerDown);
-      document.removeEventListener("keydown", handleEscape);
+      window.removeEventListener(EVENTO_CAMBIO_NOTIFICACION, sincronizarNotificaciones);
+      document.removeEventListener("mousedown", manejarClicFuera);
+      document.removeEventListener("keydown", manejarEscape);
     };
   }, []);
 
-  const handleLogout = () => {
+  const manejarCerrarSesion = () => {
     localStorage.removeItem("isRegistered");
     localStorage.removeItem("userType");
     localStorage.removeItem("userName");
     localStorage.removeItem("userId");
     localStorage.removeItem("vendorSidebarCollapsed");
     localStorage.removeItem("clientSidebarCollapsed");
-    notifyAuthChange();
+    notificar_cambio_autenticacion();
   };
 
-  const handleProfileSubmit = async (event) => {
-    event.preventDefault();
+  const manejarEnvioPerfil = async (evento) => {
+    evento.preventDefault();
 
-    const trimmedUserName = profileForm.userName.trim();
-    const userId = localStorage.getItem("userId");
+    const nombreRecortado = formularioPerfil.nombreUsuario.trim();
+    const idUsuario = localStorage.getItem("userId");
 
-    if (profileSection === "user" && !trimmedUserName) {
+    if (seccionPerfil === "user" && !nombreRecortado) {
       toast.error("El nombre de usuario no puede quedar vacio.");
       return;
     }
 
-    if (profileSection === "password") {
-      if (!profileForm.password || !profileForm.confirmPassword) {
+    if (seccionPerfil === "password") {
+      if (!formularioPerfil.contrasena || !formularioPerfil.confirmarContrasena) {
         toast.error("Completa ambos campos de contrasena.");
         return;
       }
-      if (profileForm.password.length < 8) {
+      if (formularioPerfil.contrasena.length < 8) {
         toast.error("La nueva contrasena debe tener al menos 8 caracteres.");
         return;
       }
-      if (profileForm.password !== profileForm.confirmPassword) {
+      if (formularioPerfil.contrasena !== formularioPerfil.confirmarContrasena) {
         toast.error("Las contrasenas no coinciden.");
         return;
       }
     }
 
     try {
-      const updatedProfile = await updateUserProfile({
-        userId,
-        userName: profileSection === "user" ? trimmedUserName : undefined,
-        password: profileSection === "password" ? profileForm.password : undefined,
+      const perfilActualizado = await actualizar_perfil_usuario({
+        userId: idUsuario,
+        userName: seccionPerfil === "user" ? nombreRecortado : undefined,
+        password: seccionPerfil === "password" ? formularioPerfil.contrasena : undefined,
       });
 
-      if (updatedProfile?.nombre) {
-        localStorage.setItem("userName", updatedProfile.nombre);
+      if (perfilActualizado?.nombre) {
+        localStorage.setItem("userName", perfilActualizado.nombre);
       }
 
-      setProfileForm((current) => ({
-        ...current,
-        userName: updatedProfile?.nombre || current.userName,
-        password: "",
-        confirmPassword: "",
+      setFormularioPerfil((actual) => ({
+        ...actual,
+        nombreUsuario: perfilActualizado?.nombre || actual.nombreUsuario,
+        contrasena: "",
+        confirmarContrasena: "",
       }));
-      setActiveMenu(null);
-      setProfileSection("menu");
-      addNotification({
+      setMenuActivo(null);
+      setSeccionPerfil("menu");
+      agregar_notificacion({
         kind: "settings",
         title: "Perfil actualizado",
-        detail: profileSection === "user"
-          ? `Se actualizo el nombre de usuario a ${updatedProfile?.nombre || trimmedUserName}.`
+        detail: seccionPerfil === "user"
+          ? `Se actualizo el nombre de usuario a ${perfilActualizado?.nombre || nombreRecortado}.`
           : "Se actualizo la contrasena del usuario.",
         source: "Configuracion",
       });
@@ -204,14 +204,14 @@ export default function ClientShell({ title, subtitle, children }) {
     }
   };
 
-  const handleClearNotifications = () => {
-    clearNotifications();
-    setActiveMenu(null);
+  const manejarLimpiarNotificaciones = () => {
+    limpiar_notificaciones();
+    setMenuActivo(null);
     toast.success("Alertas limpiadas.");
   };
 
   return (
-    <div ref={shellRef} className="min-h-screen bg-[#F9F9FF]">
+    <div ref={refContenedor} className="min-h-screen bg-[#F9F9FF]">
       <header className="border-b border-[#D6DEEE] bg-white/90 backdrop-blur">
         <div className="flex w-full flex-col gap-4 px-3 py-4 sm:px-5 lg:flex-row lg:items-center lg:justify-between lg:px-6 xl:px-8">
           <Link to="/cliente" className="flex items-center gap-3">
@@ -228,20 +228,20 @@ export default function ClientShell({ title, subtitle, children }) {
             <div className="relative">
               <button
                 type="button"
-                onClick={() => setActiveMenu((current) => (current === "notifications" ? null : "notifications"))}
+                onClick={() => setMenuActivo((actual) => (actual === "notificaciones" ? null : "notificaciones"))}
                 className="group relative inline-flex h-11 w-11 items-center justify-center rounded-2xl border border-[#CFD8EA] bg-white/80 text-slate-600 transition hover:border-[#9FB3E8] hover:bg-[#EFF4FF] hover:text-ocean focus:outline-none focus:ring-2 focus:ring-[#9FB3E8]"
                 aria-label="Abrir alertas"
-                aria-expanded={activeMenu === "notifications"}
+                aria-expanded={menuActivo === "notificaciones"}
               >
-                <BellIcon className="h-5 w-5 transition-transform duration-200 group-hover:scale-110" />
-                {notifications.length > 0 ? (
+                <IconoCampana className="h-5 w-5 transition-transform duration-200 group-hover:scale-110" />
+                {notificaciones.length > 0 ? (
                   <span className="absolute -right-1 -top-1 flex h-5 min-w-5 items-center justify-center rounded-full bg-copper px-1 text-[10px] font-bold text-white">
-                    {notifications.length > 9 ? "9+" : notifications.length}
+                    {notificaciones.length > 9 ? "9+" : notificaciones.length}
                   </span>
                 ) : null}
               </button>
 
-              {activeMenu === "notifications" ? (
+              {menuActivo === "notificaciones" ? (
                 <div className="absolute right-0 top-full z-40 mt-3 w-[min(92vw,24rem)] rounded-3xl border border-[#D6DEEE] bg-white p-4 shadow-[0_20px_60px_rgba(11,27,43,0.18)]">
                   <div className="flex items-start justify-between gap-3 border-b border-[#E6ECF6] pb-3">
                     <div>
@@ -250,7 +250,7 @@ export default function ClientShell({ title, subtitle, children }) {
                     </div>
                     <button
                       type="button"
-                      onClick={handleClearNotifications}
+                      onClick={manejarLimpiarNotificaciones}
                       className="rounded-full border border-[#CFD8EA] px-3 py-1 text-xs font-semibold text-slate-600 transition hover:border-[#9FB3E8] hover:bg-[#EFF4FF] hover:text-ocean"
                     >
                       Limpiar
@@ -258,24 +258,24 @@ export default function ClientShell({ title, subtitle, children }) {
                   </div>
 
                   <div className="mt-4 max-h-80 space-y-3 overflow-y-auto pr-1">
-                    {notifications.length === 0 ? (
+                    {notificaciones.length === 0 ? (
                       <div className="rounded-2xl border border-dashed border-[#D6DEEE] bg-[#F8FAFF] p-4 text-sm text-slate-600">
                         No hay actividades registradas todavía.
                       </div>
                     ) : (
-                      notifications.map((notification) => (
-                        <div key={notification.id} className="rounded-2xl border border-[#E6ECF6] bg-[#F8FAFF] px-4 py-3 transition hover:border-[#9FB3E8] hover:bg-white">
+                      notificaciones.map((notificacion) => (
+                        <div key={notificacion.id} className="rounded-2xl border border-[#E6ECF6] bg-[#F8FAFF] px-4 py-3 transition hover:border-[#9FB3E8] hover:bg-white">
                           <div className="flex items-start gap-3">
                             <div className="mt-0.5 rounded-xl bg-white p-2 text-ocean shadow-[0_6px_16px_rgba(11,27,43,0.08)]">
-                              <ClockIcon className="h-4 w-4" />
+                              <IconoReloj className="h-4 w-4" />
                             </div>
                             <div className="min-w-0 flex-1">
                               <div className="flex items-center justify-between gap-2">
-                                <p className="truncate text-sm font-semibold text-ink">{notification.title}</p>
-                                <span className="rounded-full bg-[rgba(18,50,155,0.08)] px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-ocean">{notification.kind}</span>
+                                <p className="truncate text-sm font-semibold text-ink">{notificacion.title}</p>
+                                <span className="rounded-full bg-[rgba(18,50,155,0.08)] px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-ocean">{notificacion.kind}</span>
                               </div>
-                              <p className="mt-1 text-xs text-slate-600">{notification.detail}</p>
-                              <p className="mt-2 text-[11px] text-slate-500">{notification.source}</p>
+                              <p className="mt-1 text-xs text-slate-600">{notificacion.detail}</p>
+                              <p className="mt-2 text-[11px] text-slate-500">{notificacion.source}</p>
                             </div>
                           </div>
                         </div>
@@ -289,73 +289,73 @@ export default function ClientShell({ title, subtitle, children }) {
             <div className="relative">
               <button
                 type="button"
-                onClick={() => setActiveMenu((current) => (current === "profile" ? null : "profile"))}
+                onClick={() => setMenuActivo((actual) => (actual === "perfil" ? null : "perfil"))}
                 className="group inline-flex h-11 w-11 items-center justify-center rounded-2xl border border-[#CFD8EA] bg-white/80 text-slate-600 transition hover:border-[#9FB3E8] hover:bg-[#EFF4FF] hover:text-ocean focus:outline-none focus:ring-2 focus:ring-[#9FB3E8]"
                 aria-label="Abrir configuracion de perfil"
-                aria-expanded={activeMenu === "profile"}
+                aria-expanded={menuActivo === "perfil"}
               >
-                <ProfileIcon className="h-5 w-5 transition-transform duration-200 group-hover:scale-110" />
+                <IconoPerfil className="h-5 w-5 transition-transform duration-200 group-hover:scale-110" />
               </button>
 
-              {activeMenu === "profile" ? (
+              {menuActivo === "perfil" ? (
                 <div className="absolute right-0 top-full z-40 mt-3 w-[min(92vw,28rem)] rounded-3xl border border-[#D6DEEE] bg-white p-5 shadow-[0_20px_60px_rgba(11,27,43,0.18)]">
                   <div className="flex items-start justify-between gap-3 border-b border-[#E6ECF6] pb-3">
                     <div>
                       <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">Perfil</p>
                       <h3 className="mt-1 text-lg font-semibold text-ink">
-                        {profileSection === "menu" ? "Configuracion de cuenta" : profileSection === "user" ? "Cambiar nombre de usuario" : "Cambiar contraseña"}
+                        {seccionPerfil === "menu" ? "Configuracion de cuenta" : seccionPerfil === "user" ? "Cambiar nombre de usuario" : "Cambiar contraseña"}
                       </h3>
                     </div>
                     <div className="flex h-10 w-10 items-center justify-center rounded-2xl bg-[rgba(18,50,155,0.08)] text-ocean">
-                      <ProfileIcon className="h-5 w-5" />
+                      <IconoPerfil className="h-5 w-5" />
                     </div>
                   </div>
 
-                  {profileSection === "menu" ? (
+                  {seccionPerfil === "menu" ? (
                     <div className="mt-4 space-y-3">
                       <p className="text-sm text-slate-600">Elige qué quieres cambiar dentro de esta misma ventana.</p>
-                      <button type="button" onClick={() => setProfileSection("user")} className="flex w-full items-center justify-between rounded-2xl border border-[#E6ECF6] px-4 py-3 text-left transition hover:border-[#9FB3E8] hover:bg-[#EFF4FF] hover:text-ocean">
+                      <button type="button" onClick={() => setSeccionPerfil("user")} className="flex w-full items-center justify-between rounded-2xl border border-[#E6ECF6] px-4 py-3 text-left transition hover:border-[#9FB3E8] hover:bg-[#EFF4FF] hover:text-ocean">
                         <span>
                           <span className="block text-sm font-semibold text-ink">Cambiar nombre de usuario</span>
                           <span className="block text-xs text-slate-500">Nombre visible de la cuenta</span>
                         </span>
-                        <ChevronRightIcon className="h-4 w-4" />
+                        <IconoChevronDerecha className="h-4 w-4" />
                       </button>
-                      <button type="button" onClick={() => setProfileSection("password")} className="flex w-full items-center justify-between rounded-2xl border border-[#E6ECF6] px-4 py-3 text-left transition hover:border-[#9FB3E8] hover:bg-[#EFF4FF] hover:text-ocean">
+                      <button type="button" onClick={() => setSeccionPerfil("password")} className="flex w-full items-center justify-between rounded-2xl border border-[#E6ECF6] px-4 py-3 text-left transition hover:border-[#9FB3E8] hover:bg-[#EFF4FF] hover:text-ocean">
                         <span>
                           <span className="block text-sm font-semibold text-ink">Cambiar contraseña</span>
                           <span className="block text-xs text-slate-500">Clave de acceso de la cuenta</span>
                         </span>
-                        <ChevronRightIcon className="h-4 w-4" />
+                        <IconoChevronDerecha className="h-4 w-4" />
                       </button>
                     </div>
                   ) : null}
 
-                  {profileSection === "user" ? (
-                    <form className="mt-4 space-y-4" onSubmit={handleProfileSubmit}>
+                  {seccionPerfil === "user" ? (
+                    <form className="mt-4 space-y-4" onSubmit={manejarEnvioPerfil}>
                       <label className="block">
                         <span className="text-xs font-semibold uppercase tracking-wide text-slate-600">Nuevo nombre de usuario</span>
-                        <input className="input-field mt-2" value={profileForm.userName} onChange={(event) => setProfileForm((current) => ({ ...current, userName: event.target.value }))} placeholder="Nombre de cuenta" />
+                        <input className="input-field mt-2" value={formularioPerfil.nombreUsuario} onChange={(evento) => setFormularioPerfil((actual) => ({ ...actual, nombreUsuario: evento.target.value }))} placeholder="Nombre de cuenta" />
                       </label>
                       <div className="flex gap-3">
-                        <button type="button" onClick={() => setProfileSection("menu")} className="secondary-button w-full justify-center">Volver</button>
+                        <button type="button" onClick={() => setSeccionPerfil("menu")} className="secondary-button w-full justify-center">Volver</button>
                         <button type="submit" className="primary-button w-full justify-center">Guardar cambios</button>
                       </div>
                     </form>
                   ) : null}
 
-                  {profileSection === "password" ? (
-                    <form className="mt-4 space-y-4" onSubmit={handleProfileSubmit}>
+                  {seccionPerfil === "password" ? (
+                    <form className="mt-4 space-y-4" onSubmit={manejarEnvioPerfil}>
                       <label className="block">
                         <span className="text-xs font-semibold uppercase tracking-wide text-slate-600">Nueva contraseña</span>
-                        <input className="input-field mt-2" type="password" value={profileForm.password} onChange={(event) => setProfileForm((current) => ({ ...current, password: event.target.value }))} placeholder="Minimo 8 caracteres" />
+                        <input className="input-field mt-2" type="password" value={formularioPerfil.contrasena} onChange={(evento) => setFormularioPerfil((actual) => ({ ...actual, contrasena: evento.target.value }))} placeholder="Minimo 8 caracteres" />
                       </label>
                       <label className="block">
                         <span className="text-xs font-semibold uppercase tracking-wide text-slate-600">Confirmar contraseña</span>
-                        <input className="input-field mt-2" type="password" value={profileForm.confirmPassword} onChange={(event) => setProfileForm((current) => ({ ...current, confirmPassword: event.target.value }))} placeholder="Repite la nueva clave" />
+                        <input className="input-field mt-2" type="password" value={formularioPerfil.confirmarContrasena} onChange={(evento) => setFormularioPerfil((actual) => ({ ...actual, confirmarContrasena: evento.target.value }))} placeholder="Repite la nueva clave" />
                       </label>
                       <div className="flex gap-3">
-                        <button type="button" onClick={() => setProfileSection("menu")} className="secondary-button w-full justify-center">Volver</button>
+                        <button type="button" onClick={() => setSeccionPerfil("menu")} className="secondary-button w-full justify-center">Volver</button>
                         <button type="submit" className="primary-button w-full justify-center">Guardar cambios</button>
                       </div>
                     </form>
@@ -366,12 +366,12 @@ export default function ClientShell({ title, subtitle, children }) {
 
             <button
               type="button"
-              onClick={handleLogout}
+              onClick={manejarCerrarSesion}
               className="group inline-flex h-11 w-11 items-center overflow-hidden rounded-2xl border border-[#CFD8EA] bg-white/80 px-3 text-slate-700 transition-all duration-200 hover:w-32 hover:border-[#9FB3E8] hover:bg-[#EFF4FF] hover:text-ocean focus:w-32 focus:border-[#9FB3E8] focus:bg-[#EFF4FF] focus:text-ocean focus:outline-none focus:ring-2 focus:ring-[#9FB3E8]"
               aria-label="Salir"
             >
               <span className="inline-flex h-5 w-5 shrink-0 items-center justify-center text-copper transition-colors duration-200 group-hover:text-ocean group-focus:text-ocean">
-                <LogoutIcon className="h-5 w-5" />
+                <IconoCerrarSesion className="h-5 w-5" />
               </span>
               <span className="ml-2 max-w-0 overflow-hidden whitespace-nowrap text-sm font-semibold opacity-0 transition-all duration-200 group-hover:max-w-20 group-hover:opacity-100 group-focus:max-w-20 group-focus:opacity-100">
                 Salir
@@ -383,75 +383,75 @@ export default function ClientShell({ title, subtitle, children }) {
 
       <div className={[
         "grid transition-[grid-template-columns] duration-300 ease-in-out",
-        isSidebarCollapsed ? "lg:grid-cols-[90px_minmax(0,1fr)]" : "lg:grid-cols-[240px_minmax(0,1fr)]",
+        barraColapsada ? "lg:grid-cols-[90px_minmax(0,1fr)]" : "lg:grid-cols-[240px_minmax(0,1fr)]",
       ].join(" ")}>
         <aside className="group relative border-r border-[#D6DEEE] bg-[#EEF2FF] px-3 py-5 transition-all duration-300">
           <button
             type="button"
-            onClick={() => setIsSidebarCollapsed((current) => !current)}
+            onClick={() => setBarraColapsada((actual) => !actual)}
             className={[
               "absolute -right-3 top-8 z-20 flex h-7 w-7 items-center justify-center rounded-full border border-[#C7D2FE] bg-white text-ocean shadow-[0_8px_20px_rgba(11,27,43,0.12)] transition-opacity duration-200",
-              isSidebarCollapsed ? "opacity-0 group-hover:opacity-100 focus:opacity-100" : "opacity-100",
+              barraColapsada ? "opacity-0 group-hover:opacity-100 focus:opacity-100" : "opacity-100",
             ].join(" ")}
-            aria-label={isSidebarCollapsed ? "Expandir barra lateral" : "Colapsar barra lateral"}
+            aria-label={barraColapsada ? "Expandir barra lateral" : "Colapsar barra lateral"}
           >
-            {isSidebarCollapsed ? <ChevronRightIcon className="h-4 w-4" /> : <ChevronLeftIcon className="h-4 w-4" />}
+            {barraColapsada ? <IconoChevronDerecha className="h-4 w-4" /> : <IconoChevronIzquierda className="h-4 w-4" />}
           </button>
 
-          <div className={isSidebarCollapsed ? "flex flex-col items-center px-1" : "px-2"}>
+          <div className={barraColapsada ? "flex flex-col items-center px-1" : "px-2"}>
             <div className={[
               "flex items-center gap-3 transition-all duration-300",
-              isSidebarCollapsed ? "justify-center" : "justify-start",
+              barraColapsada ? "justify-center" : "justify-start",
             ].join(" ")}>
               <Link to="/cliente" className="flex h-11 w-11 items-center justify-center rounded-2xl bg-ocean text-white shadow-glow" aria-label="Ir al inicio">
                 <span className="text-xs font-bold tracking-[0.18em]">NM</span>
               </Link>
-              {!isSidebarCollapsed ? (
+              {!barraColapsada ? (
                 <div>
-                  <h1 className="font-display text-2xl font-semibold text-ocean">Hola, {userName || "Cliente"}</h1>
+                  <h1 className="font-display text-2xl font-semibold text-ocean">Hola, {nombreUsuario || "Cliente"}</h1>
                   <p className="mt-1 text-xs text-slate-500">Portal del cliente</p>
                 </div>
               ) : null}
             </div>
 
-            <button type="button" onClick={() => setIsSidebarCollapsed((current) => !current)} className="secondary-button mt-4 w-full justify-center lg:hidden">
-              {isSidebarCollapsed ? "Expandir" : "Colapsar"}
+            <button type="button" onClick={() => setBarraColapsada((actual) => !actual)} className="secondary-button mt-4 w-full justify-center lg:hidden">
+              {barraColapsada ? "Expandir" : "Colapsar"}
             </button>
           </div>
 
           <nav className="mt-5 space-y-2">
-            {navItems.map((item) => (
+            {elementosNavegacion.map((elemento) => (
               <Link
-                key={item.to}
-                to={item.to}
+                key={elemento.a}
+                to={elemento.a}
                 className={[
                   "flex items-center rounded-xl py-2.5 text-sm font-semibold transition",
-                  isSidebarCollapsed ? "justify-center px-2" : "gap-3 px-3",
-                  location.pathname === item.to ? "bg-[#6EE7B7] text-[#0F172A]" : "text-slate-700 hover:bg-white",
+                  barraColapsada ? "justify-center px-2" : "gap-3 px-3",
+                  ubicacion.pathname === elemento.a ? "bg-[#6EE7B7] text-[#0F172A]" : "text-slate-700 hover:bg-white",
                 ].join(" ")}
-                title={isSidebarCollapsed ? item.label : undefined}
+                title={barraColapsada ? elemento.etiqueta : undefined}
               >
                 <span className="inline-flex h-9 w-9 items-center justify-center rounded-xl bg-white text-ocean shadow-[0_6px_16px_rgba(11,27,43,0.08)]">
-                  <item.icon className="h-5 w-5" />
+                  <elemento.icono className="h-5 w-5" />
                 </span>
-                {isSidebarCollapsed ? null : <span>{item.label}</span>}
+                {barraColapsada ? null : <span>{elemento.etiqueta}</span>}
               </Link>
             ))}
           </nav>
 
           <button
             type="button"
-            onClick={handleLogout}
+            onClick={manejarCerrarSesion}
             className={[
               "secondary-button mt-4 w-full transition-all",
-              isSidebarCollapsed ? "justify-center px-3" : "",
+              barraColapsada ? "justify-center px-3" : "",
             ].join(" ")}
-            title={isSidebarCollapsed ? "Salir" : undefined}
+            title={barraColapsada ? "Salir" : undefined}
           >
             <span className="inline-flex h-5 w-5 items-center justify-center text-copper">
-              <LogoutIcon className="h-5 w-5" />
+              <IconoCerrarSesion className="h-5 w-5" />
             </span>
-            {isSidebarCollapsed ? null : <span className="ml-2">Salir</span>}
+            {barraColapsada ? null : <span className="ml-2">Salir</span>}
           </button>
         </aside>
 
