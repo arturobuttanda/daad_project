@@ -38,6 +38,8 @@ from Backend.conexion_base import (
 )
 from Backend.modelo_poo import Cliente, Informe, Persona, Producto, Venta, Vendedor, calcular_recomendacion_precio, crear_usuario_desde_fila_usuario
 from Backend.recomendacion_precio import rankear_productos_similares, resumir_precios_similares
+from Backend.recomendacion_precio.similitud import normalizar_texto_similitud
+from Backend.recomendacion_precio.faiss_recommender import recomendar_precio
 
 logging.basicConfig(
   level=logging.INFO,
@@ -45,24 +47,29 @@ logging.basicConfig(
 )
 logger = logging.getLogger("daad-backend")
 
-FRONTEND_URL = os.environ.get("FRONTEND_URL", "http://localhost:5173")
+FRONTEND_URL = os.environ.get("FRONTEND_URL")
 
 
-def construir_origenes_permitidos(frontend_url: str) -> list[str]:
-  allowed_origins = {frontend_url.strip()}
-  if frontend_url.startswith("http://localhost:"):
-    allowed_origins.add(frontend_url.replace("http://localhost:", "http://127.0.0.1:", 1))
-  elif frontend_url.startswith("http://127.0.0.1:"):
-    allowed_origins.add(frontend_url.replace("http://127.0.0.1:", "http://localhost:", 1))
-  return sorted(origin for origin in allowed_origins if origin)
+def construir_origenes_permitidos(frontend_url: str | None) -> tuple[list[str], bool]:
+  if frontend_url:
+    allowed_origins = {frontend_url.strip()}
+    if frontend_url.startswith("http://localhost:"):
+      allowed_origins.add(frontend_url.replace("http://localhost:", "http://127.0.0.1:", 1))
+    elif frontend_url.startswith("http://127.0.0.1:"):
+      allowed_origins.add(frontend_url.replace("http://127.0.0.1:", "http://localhost:", 1))
+    return sorted(origin for origin in allowed_origins if origin), True
+
+  # En entorno de desarrollo permitimos cualquiera de las URLs locales habituales.
+  return ["*"] , False
 
 pwd_context = CryptContext(schemes=["pbkdf2_sha256"], deprecated="auto")
 
 app = FastAPI(title="DAAD Auth API")
+allowed_origins, allow_credentials = construir_origenes_permitidos(FRONTEND_URL)
 app.add_middleware(
   CORSMiddleware,
-  allow_origins=construir_origenes_permitidos(FRONTEND_URL),
-  allow_credentials=True,
+  allow_origins=allowed_origins,
+  allow_credentials=allow_credentials,
   allow_methods=["*"],
   allow_headers=["*"],
 )
@@ -97,7 +104,6 @@ class ProductCreateRequest(BaseModel):
   stock: int = 0
   precio_fabricacion: float | None = None
   fecha_caducidad: date | None = None
-  imagen_url: str | None = None
   id_vendedor: str | None = None
 
 
@@ -109,7 +115,6 @@ class ProductUpdateRequest(BaseModel):
   stock: int | None = None
   precio_fabricacion: float | None = None
   fecha_caducidad: date | None = None
-  imagen_url: str | None = None
 
 
 class PurchaseItemRequest(BaseModel):
@@ -121,6 +126,14 @@ class PurchaseRequest(BaseModel):
   id_cliente: str
   id_vendedor: str | None = None
   items: list[PurchaseItemRequest]
+
+
+
+class RecommendPriceRequest(BaseModel):
+  marca: str | None = None
+  categoria: str | None = None
+  nombre: str
+
 
 
 
@@ -397,6 +410,17 @@ def calcular_recomendacion_precio_app(
   )
 
 
+
+@app.post("/api/recomendar-precio")
+def api_recomendar_precio(request: RecommendPriceRequest):
+  try:
+    salida = recomendar_precio(request.marca, request.categoria, request.nombre, top_k=10, min_sim=0.6)
+    return salida
+  except Exception as exc:
+    logger.exception("Error en recomendacion de precio: %s", exc)
+    raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(exc))
+
+
 def construir_detalle_producto_cliente(product_id: str) -> dict[str, object | None]:
   product = consultar_producto_por_id(product_id)
   if not product:
@@ -420,25 +444,23 @@ def construir_detalle_producto_cliente(product_id: str) -> dict[str, object | No
 
 
 @app.post("/api/productos/recomendacion-precio")
-def recomendar_precio_producto(payload: ProductCreateRequest):
-  draft_product = Producto(
-    id_producto=normalizar_id_producto(payload.id_producto),
-    nombre=payload.nombre,
-    marca=payload.marca,
-    precio_venta_actual=payload.precio_actual,
-    stock=payload.stock,
-    precio_fabricacion=payload.precio_fabricacion,
-    fecha_caducidad=payload.fecha_caducidad,
-    imagen_url=payload.imagen_url,
-    categoria=payload.categoria,
-  )
-  return calcular_recomendacion_precio(
-    draft_product,
-    [],
-    None,
-    cargar_catalogo_similitud(obtener_firma_catalogo_similitud()),
-    limite=5,
-  )
+def recomendar_precio_producto(payload: RecommendPriceRequest):
+  # Usar el recomendador basado en filtro tipo Excel para sugerir precios.
+  sugerencia = recomendar_precio(payload.marca, payload.categoria, payload.nombre, top_k=10, min_sim=0.6)
+
+  return {
+    "suggested_price": sugerencia.get("precio_sugerido"),
+    "reason": "Recomendación calculada sobre productos similares.",
+    "similar_products": [
+      {
+        "id_producto": item.get("id_producto"),
+        "nombre": item.get("nombre"),
+        "precio_actual": item.get("precio_actual"),
+        "similarity_score": item.get("similitud") if item.get("similitud") is not None else item.get("similarity_score"),
+      }
+      for item in sugerencia.get("similares", [])
+    ],
+  }
 
 
 @app.get("/api/health")
@@ -731,6 +753,15 @@ def crear_producto(payload: ProductCreateRequest):
     )
 
   producto_creado = consultar_producto_por_id(product_id)
+  try:
+    sugerencia = recomendar_precio(marca, categoria, nombre, top_k=10, min_sim=0.6)
+  except Exception:
+    sugerencia = {"precio_sugerido": None, "precio_min": None, "precio_max": None, "similares": []}
+
+  # Añadir la sugerencia al diccionario del producto devuelto
+  if producto_creado is None:
+    raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="No se pudo recuperar el producto creado.")
+  producto_creado["sugerencia_precio"] = sugerencia
   return producto_creado
 
 
@@ -814,11 +845,25 @@ def listar_productos_cliente(
   page_size: int = Query(12, ge=1, le=100),
   search: str | None = None,
 ):
+  def _normalizar_columna_para_busqueda(columna: str) -> str:
+    return (
+      "TRANSLATE(LOWER(" + columna + "), "
+      "'áéíóúüñàèìòùâêîôûç', 'aeiouunaeiouaeiouaeiouc')"
+    )
   filters = ["p.stock > 0"]
   parameters: dict[str, object] = {}
   if search:
-    filters.append("(LOWER(p.nombre) LIKE LOWER(:search) OR LOWER(p.marca) LIKE LOWER(:search) OR LOWER(p.categoria) LIKE LOWER(:search))")
-    parameters["search"] = f"%{search.strip()}%"
+    termino_norm = normalizar_texto_similitud(search.strip())
+    parameters["search"] = f"%{termino_norm}%"
+    filters.append(
+      "(" +
+      _normalizar_columna_para_busqueda("p.nombre") +
+      " LIKE :search OR " +
+      _normalizar_columna_para_busqueda("p.marca") +
+      " LIKE :search OR " +
+      _normalizar_columna_para_busqueda("p.categoria") +
+      " LIKE :search)"
+    )
 
   where_clause = " WHERE " + " AND ".join(filters) if filters else ""
 

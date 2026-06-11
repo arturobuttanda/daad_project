@@ -1,7 +1,6 @@
 import { useEffect, useState } from "react";
 import toast from "react-hot-toast";
 import ShellCliente from "../components/ShellCliente.jsx";
-import { agregar_notificacion } from "../utils/notificationEvents.js";
 
 const URL_API = import.meta.env.VITE_API_URL || "http://localhost:8000";
 const PERIODOS = [
@@ -29,11 +28,6 @@ function truncarTexto(valor, longitudMaxima = 48) {
     return valorLimpio;
   }
   return `${valorLimpio.slice(0, longitudMaxima - 3)}...`;
-}
-
-function construirVistaProductos(productos = [], maxVisible = 3) {
-  const productosVisibles = Array.isArray(productos) ? productos.slice(0, maxVisible) : [];
-  return productosVisibles.map((elemento) => `${truncarTexto(elemento.nombre, 42)} x${elemento.cantidad}`).join(" · ");
 }
 
 export default function HistorialCliente() {
@@ -85,12 +79,6 @@ export default function HistorialCliente() {
         throw new Error(datos.detail || "No se pudo cargar el ticket.");
       }
       setTicketSeleccionado(datos);
-      agregar_notificacion({
-        kind: "history",
-        title: "Ticket abierto",
-        detail: `Se abrió el detalle del pedido ${idVenta}.`,
-        source: "Historial",
-      });
     } catch (error) {
       toast.error(error.message || "No se pudo cargar el ticket.");
     }
@@ -99,7 +87,7 @@ export default function HistorialCliente() {
   return (
     <ShellCliente
       title="Historial de compras"
-      subtitle="Consulta compras por rango de tiempo y abre cada registro para ver su ticket de venta completo."
+      subtitle="Consulta tus compras"
     >
       <section className="grid gap-6 xl:grid-cols-[minmax(0,1.2fr)_minmax(340px,0.8fr)]">
         <div className="glass-panel p-6">
@@ -109,9 +97,7 @@ export default function HistorialCliente() {
               <h3 className="mt-3 font-display text-2xl font-semibold text-ink">
                 Compras registradas
               </h3>
-              <p className="mt-2 text-sm text-slate-600">
-                {totalElementos} registros en el rango seleccionado.
-              </p>
+
             </div>
             <div className="flex flex-wrap gap-2">
               {PERIODOS.map((opcion) => (
@@ -166,17 +152,13 @@ export default function HistorialCliente() {
                             </div>
                           ))
                         ) : (
-                          <p className="text-sm text-slate-500">{truncarTexto(compra.resumen || compra.id_venta, 72)}</p>
+                          <p className="text-sm text-slate-500">No hay detalles disponibles.</p>
                         )}
                         {Array.isArray(compra.productos) && compra.productos.length > 3 ? (
                           <p className="text-xs text-slate-500">
                             +{compra.productos.length - 3} productos más
                           </p>
                         ) : null}
-                        {compra.resumen ? (
-                          <p className="text-xs text-slate-500">{truncarTexto(compra.resumen, 96)}</p>
-                        ) : null}
-                        <p className="text-xs text-slate-500">{construirVistaProductos(compra.productos)}</p>
                       </div>
                     </div>
 
@@ -203,7 +185,7 @@ export default function HistorialCliente() {
 
           <div className="mt-6 flex flex-col gap-3 border-t border-sand pt-4 sm:flex-row sm:items-center sm:justify-between">
             <p className="text-sm text-slate-600">
-              Página {pagina} de {totalPaginas} · {tamanoPagina} compras por vista
+              Página {pagina} de {totalPaginas}
             </p>
             <div className="flex gap-2">
               <button

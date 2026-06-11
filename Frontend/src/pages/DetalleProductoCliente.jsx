@@ -3,7 +3,6 @@ import { Link, useNavigate, useParams } from "react-router-dom";
 import toast from "react-hot-toast";
 import ShellCliente from "../components/ShellCliente.jsx";
 import { agregar_item_carrito_cliente } from "../utils/clientCart.js";
-import { agregar_notificacion } from "../utils/notificationEvents.js";
 
 const URL_API = import.meta.env.VITE_API_URL || "http://localhost:8000";
 
@@ -60,12 +59,6 @@ export default function DetalleProductoCliente() {
     }
     agregar_item_carrito_cliente(idUsuario, producto, cantidad);
     toast.success("Producto agregado al carrito.");
-    agregar_notificacion({
-      kind: "cart",
-      title: "Producto agregado al carrito",
-      detail: `${producto.nombre} se guardó en el carrito.`,
-      source: "Detalle de producto",
-    });
   };
 
   const manejar_compra = async () => {
@@ -95,12 +88,6 @@ export default function DetalleProductoCliente() {
       }
       setTicket(datos);
       toast.success("Compra registrada correctamente.");
-      agregar_notificacion({
-        kind: "purchase",
-        title: "Compra completada",
-        detail: `La compra de ${producto.nombre} se procesó correctamente.`,
-        source: "Detalle de producto",
-      });
     } catch (error) {
       toast.error(error.message || "No se pudo completar la compra.");
     } finally {

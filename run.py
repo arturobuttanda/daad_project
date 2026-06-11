@@ -82,7 +82,7 @@ def main():
     # Iniciar backend con uvicorn usando el python del venv
     backend_proc = None
     try:
-        backend_cmd = [str(python), "-m", "uvicorn", "Backend.app:app", "--reload", "--host", "127.0.0.1", "--port", "8000"]
+        backend_cmd = [str(python), "-m", "uvicorn", "Backend.app:app", "--reload", "--host", "0.0.0.0", "--port", "8000"]
         backend_proc = start_process(backend_cmd, cwd=ROOT, env=env)
     except Exception as exc:
         print(f"No se pudo iniciar el backend: {exc}")

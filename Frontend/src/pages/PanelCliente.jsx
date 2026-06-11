@@ -5,7 +5,7 @@ import ShellCliente from "../components/ShellCliente.jsx";
 import { agregar_item_carrito_cliente, vaciar_carrito_cliente, obtener_carrito_cliente, actualizar_item_carrito_cliente } from "../utils/clientCart.js";
 import { agregar_notificacion } from "../utils/notificationEvents.js";
 
-const URL_API = import.meta.env.VITE_API_URL || "http://localhost:8000";
+const URL_API = import.meta.env.VITE_API_URL || `${window.location.protocol}//${window.location.hostname}:8000`;
 const TAMANO_PAGINA = 12;
 
 function formatearDinero(valor) {
@@ -370,7 +370,7 @@ export default function PanelCliente() {
 
           <div className="flex flex-col gap-3 border-t border-sand pt-4 sm:flex-row sm:items-center sm:justify-between">
             <p className="text-sm text-slate-600">
-              Página {pagina} de {totalPaginas} · {productosFiltrados.length} productos visibles
+              Página {pagina} de {totalPaginas}
             </p>
             <div className="flex gap-2">
               <button
@@ -442,7 +442,7 @@ export default function PanelCliente() {
               disabled={!elementosCarrito.length || procesandoCompra}
               onClick={manejar_pagar}
             >
-              {procesandoCompra ? "Procesando compra..." : "Comprar carrito"}
+              {procesandoCompra ? "Procesando compra..." : "Comprar"}
             </button>
           </section>
 
@@ -450,7 +450,7 @@ export default function PanelCliente() {
             <div className="flex items-center justify-between gap-3">
               <div>
                 <h4 className="font-display text-lg font-semibold text-ink">Últimas compras</h4>
-                <p className="mt-1 text-sm text-slate-600">Historial de los últimos 30 días.</p>
+                <p className="mt-1 text-sm text-slate-600"></p>
               </div>
               <Link to="/cliente/historial" className="text-sm font-semibold text-ocean">
                 Ver historial
