@@ -1,0 +1,185 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Registrarse - NexusMarket</title>
+  <link rel="stylesheet" href="css/estilo.css" />
+  <script>
+    window.addEventListener('error', function(e) {
+      alert("Error de carga: " + e.message + " en " + e.filename + ":" + e.lineno);
+    });
+  </script>
+</head>
+<body style="
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  min-height:100vh;
+  padding:2rem;
+  background-image:url('/Imagenes/ImagenLogin.png');
+  background-size:cover;
+  background-position:center;
+  background-repeat:no-repeat;
+">
+  <div class="contenedor-estrecho">
+    <div class="tarjeta-simple" style="padding:2rem;">
+      <div style="text-align:center; margin-bottom:1.5rem;">
+        <div class="logo" style="font-size:1.5rem;">Nexus<span>Market</span></div>
+        <p style="color:var(--texto-suave); font-size:0.875rem; margin-top:0.5rem;">Crea tu cuenta nueva</p>
+      </div>
+
+      <!-- PESTAÑAS -->
+      <div style="display:flex; gap:0; margin-bottom:1.5rem; border:1px solid var(--borde); border-radius:0.75rem; overflow:hidden;">
+        <a href="iniciar-sesion.html" class="btn" style="flex:1; border-radius:0; background:white; color:var(--cafe-claro); border:none;">Iniciar sesion</a>
+        <a href="registrarse.html" class="btn" style="flex:1; border-radius:0; background:var(--ambar); color:white; border:none;">Registrarse</a>
+      </div>
+
+      <!-- SELECTOR DE PORTAL -->
+      <div style="display:flex; gap:0.5rem; margin-bottom:1.25rem;" id="selectorPortal">
+        <button type="button" class="btn btn-sm" data-portal="Cliente" style="flex:1; background:var(--borde-suave); color:var(--cafe-claro); border:1px solid var(--borde);" onclick="seleccionarPortal('Cliente')">Cliente</button>
+        <button type="button" class="btn btn-sm" data-portal="Vendedor" style="flex:1; background:white; color:var(--cafe-claro); border:1px solid var(--borde);" onclick="seleccionarPortal('Vendedor')">Vendedor</button>
+      </div>
+
+      <form id="formularioRegistro">
+        <div class="grupo-campo">
+          <label for="nombre">Nombre completo</label>
+          <input type="text" id="nombre" class="campo" placeholder="Tu nombre" required />
+        </div>
+
+        <div class="grupo-campo">
+          <label for="telefono">Telefono</label>
+          <input type="tel" id="telefono" class="campo" placeholder="10 digitos" maxlength="10" required />
+        </div>
+
+        <div class="grupo-campo">
+          <label for="correo">Correo electronico</label>
+          <input type="email" id="correo" class="campo" placeholder="correo@ejemplo.com" required />
+        </div>
+
+        <div class="grupo-campo">
+          <label for="tipoUsuario">Tipo de usuario</label>
+          <input type="text" id="tipoUsuario" class="campo" readonly style="background:var(--borde-suave);" />
+        </div>
+
+        <div class="grupo-campo">
+          <label for="contrasena">Contraseña</label>
+          <input type="password" id="contrasena" class="campo" placeholder="Min. 8 caracteres" required oninput="validarContrasena()" />
+          <div id="requisitosContrasena" style="margin-top:0.5rem; font-size:0.75rem; display:flex; flex-direction:column; gap:0.25rem;">
+            <span id="reqLongitud">✗ Minimo 8 caracteres</span>
+            <span id="reqMayuscula">✗ Debe incluir mayuscula</span>
+            <span id="reqNumero">✗ Debe incluir numero</span>
+          </div>
+        </div>
+
+        <div class="grupo-campo">
+          <label for="confirmar">Confirmar contraseña</label>
+          <input type="password" id="confirmar" class="campo" placeholder="Repite la contraseña" required oninput="validarCoincidencia()" />
+          <small id="mensajeCoincidencia" style="color:var(--error);"></small>
+        </div>
+
+        <button type="submit" class="btn btn-primario btn-block btn-lg mt-2" id="btnEnviar" disabled>
+          Crear cuenta
+        </button>
+      </form>
+
+      <div style="text-align:center; margin-top:1rem;">
+        <small style="color:var(--texto-suave);">
+          ¿Ya tienes cuenta? <a href="iniciar-sesion.html" style="color:var(--ambar); font-weight:600;">Inicia sesion</a>
+        </small>
+      </div>
+    </div>
+  </div>
+
+  <script src="js/utilerias.js"></script>
+  <script src="js/api.js"></script>
+  <script>
+    let portalSeleccionado = "Cliente";
+    let contrasenaValida = false;
+    let contrasenasCoinciden = false;
+
+    function seleccionarPortal(portal) {
+      portalSeleccionado = portal;
+      document.querySelectorAll("#selectorPortal button").forEach((btn) => {
+        btn.style.background = btn.dataset.portal === portal ? "var(--borde-suave)" : "white";
+        btn.style.borderColor = btn.dataset.portal === portal ? "var(--ambar)" : "var(--borde)";
+      });
+      document.getElementById("tipoUsuario").value = portal;
+      validarFormulario();
+    }
+
+    function validarContrasena() {
+      const pass = document.getElementById("contrasena").value;
+      const longOk = pass.length >= 8;
+      const mayusOk = /[A-Z]/.test(pass);
+      const numOk = /\d/.test(pass);
+      contrasenaValida = longOk && mayusOk && numOk;
+
+      document.getElementById("reqLongitud").innerHTML = (longOk ? "✓" : "✗") + " Minimo 8 caracteres";
+      document.getElementById("reqLongitud").style.color = longOk ? "var(--exito)" : "var(--error)";
+      document.getElementById("reqMayuscula").innerHTML = (mayusOk ? "✓" : "✗") + " Debe incluir mayuscula";
+      document.getElementById("reqMayuscula").style.color = mayusOk ? "var(--exito)" : "var(--error)";
+      document.getElementById("reqNumero").innerHTML = (numOk ? "✓" : "✗") + " Debe incluir numero";
+      document.getElementById("reqNumero").style.color = numOk ? "var(--exito)" : "var(--error)";
+
+      validarCoincidencia();
+      validarFormulario();
+    }
+
+    function validarCoincidencia() {
+      const pass = document.getElementById("contrasena").value;
+      const conf = document.getElementById("confirmar").value;
+      contrasenasCoinciden = pass === conf && pass.length > 0;
+      document.getElementById("mensajeCoincidencia").textContent = contrasenasCoinciden ? "" : "Las contrasenas no coinciden";
+      validarFormulario();
+    }
+
+    function validarFormulario() {
+      const nombre = document.getElementById("nombre").value.trim();
+      const telefono = document.getElementById("telefono").value.trim();
+      const correo = document.getElementById("correo").value.trim();
+      const valido = nombre && telefono && correo.includes("@") && contrasenaValida && contrasenasCoinciden;
+      document.getElementById("btnEnviar").disabled = !valido;
+    }
+
+    document.querySelectorAll("#nombre, #telefono, #correo").forEach((el) => {
+      el.addEventListener("input", validarFormulario);
+    });
+
+    // Inicializar
+    document.getElementById("tipoUsuario").value = "Cliente";
+
+    document.getElementById("formularioRegistro").addEventListener("submit", async function (e) {
+      e.preventDefault();
+      const btn = document.getElementById("btnEnviar");
+      btn.disabled = true;
+      btn.textContent = "Registrando...";
+
+      try {
+        const respuesta = await Api.registrar(
+          document.getElementById("nombre").value.trim(),
+          document.getElementById("telefono").value.trim(),
+          document.getElementById("correo").value.trim(),
+          portalSeleccionado,
+          document.getElementById("contrasena").value
+        );
+        localStorage.setItem("isRegistered", "true");
+        localStorage.setItem("userType", respuesta.tipo_usuario);
+        localStorage.setItem("userName", respuesta.nombre);
+        localStorage.setItem("userId", respuesta.id);
+        mostrarNotificacion("Cuenta creada correctamente.", "exito");
+
+        setTimeout(() => {
+          window.location.href = portalSeleccionado === "Vendedor"
+            ? "vendedor/inventario.html"
+            : "cliente/marketplace.html";
+        }, 500);
+      } catch (error) {
+        mostrarNotificacion(error.message || "Error al registrarse.", "error");
+        btn.disabled = false;
+        btn.textContent = "Crear cuenta";
+      }
+    });
+  </script>
+</body>
+</html>

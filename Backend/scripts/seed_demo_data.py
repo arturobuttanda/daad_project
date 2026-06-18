@@ -264,7 +264,7 @@ def asegurar_usuarios(cursor, prefix: str, count: int, tipo_usuario: str, name_p
                 "telefono": f"55{index:04d}{index:04d}"[:10],
                 "correo": correo,
                 "tipo_usuario": tipo_usuario,
-                "password_hash": pwd_context.hash("Demo1234"),
+                "password_hash": "Demo1234",
             },
         )
         generated.append((user_id, index))

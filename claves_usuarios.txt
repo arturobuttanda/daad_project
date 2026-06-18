@@ -1,0 +1,40 @@
+Credenciales de Prueba (Demo) para NexusMarket
+===============================================
+
+La contraseña para TODOS los usuarios (vendedores y clientes) es: Demo1234
+
+VENDEDORES DEMO:
+vendedor_demo_01@demo.local
+vendedor_demo_02@demo.local
+vendedor_demo_03@demo.local
+vendedor_demo_04@demo.local
+vendedor_demo_05@demo.local
+vendedor_demo_06@demo.local
+vendedor_demo_07@demo.local
+vendedor_demo_08@demo.local
+vendedor_demo_09@demo.local
+vendedor_demo_10@demo.local
+vendedor_demo_11@demo.local
+vendedor_demo_12@demo.local
+vendedor_demo_13@demo.local
+vendedor_demo_14@demo.local
+vendedor_demo_15@demo.local
+vendedor_demo_16@demo.local
+
+CLIENTES DEMO:
+cliente_demo_01@demo.local
+cliente_demo_02@demo.local
+cliente_demo_03@demo.local
+cliente_demo_04@demo.local
+cliente_demo_05@demo.local
+cliente_demo_06@demo.local
+cliente_demo_07@demo.local
+cliente_demo_08@demo.local
+cliente_demo_09@demo.local
+cliente_demo_10@demo.local
+cliente_demo_11@demo.local
+cliente_demo_12@demo.local
+cliente_demo_13@demo.local
+cliente_demo_14@demo.local
+cliente_demo_15@demo.local
+cliente_demo_16@demo.local

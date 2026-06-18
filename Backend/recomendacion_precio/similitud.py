@@ -1,5 +1,11 @@
 from __future__ import annotations
 
+"""Funciones de similitud textual para recomendacion de precios.
+
+Proporciona normalizacion de texto, tokenizacion, calculo de similitud
+difusa y ranking de productos similares usando enfoque de filtro.
+"""
+
 from typing import Iterable
 import re
 import unicodedata
@@ -8,34 +14,42 @@ import numpy as np
 
 try:
   from rapidfuzz import fuzz
-  _HAS_RAPIDFUZZ = True
+  _TIENE_RAPIDFUZZ = True
 except ImportError:
   import difflib
   fuzz = None
-  _HAS_RAPIDFUZZ = False
+  _TIENE_RAPIDFUZZ = False
+
+# Tokenes genericos que no aportan significado en la busqueda de similitud
+_TOKENS_IRRELEVANTES = frozenset({
+  "the", "a", "an", "and", "or", "for", "with", "without", "but", "not",
+  "up", "to", "in", "on", "at", "by", "is", "it", "of", "be", "as", "from",
+  "all", "any", "can", "do", "has", "had", "its", "may", "was", "were",
+  "will", "would", "could", "should", "than", "that", "this", "these",
+  "each", "every", "more", "most", "some", "such", "into", "over",
+  "very", "just", "also", "been", "both", "does", "have", "like",
+  "made", "much", "only", "other", "same", "so", "too", "well",
+  "you", "your", "new", "gen", "v2", "v3", "x", "type",
+})
 
 
-def normalizar_texto_similitud(value: object | None) -> str:
-  """Normaliza texto para comparación: minúsculas, sin acentos, espacios limpios."""
-  if value is None:
+def normalizar_texto_similitud(valor: object | None) -> str:
+  """Normaliza texto para comparacion: minusculas, sin acentos, espacios limpios."""
+  if valor is None:
     return ""
-  
-  # Convertir a string y hacer minúsculas
-  texto = str(value).lower()
-  
-  # Remover acentos usando descomposición NFD
+
+  texto = str(valor).lower()
   texto_nfd = unicodedata.normalize("NFD", texto)
   texto_sin_acentos = "".join(
-    c for c in texto_nfd 
-    if unicodedata.category(c) != "Mn"  # Mn = Nonspacing_Mark (acentos, diacríticos)
+    c for c in texto_nfd
+    if unicodedata.category(c) != "Mn"
   )
-  
-  # Limpiar caracteres especiales y espacios
-  cleaned = " ".join(
+
+  limpio = " ".join(
     texto_sin_acentos.replace("/", " ").replace("-", " ").split()
   )
-  
-  return cleaned
+
+  return limpio
 
 
 def tokenizar_texto(texto: str) -> set[str]:
@@ -43,91 +57,144 @@ def tokenizar_texto(texto: str) -> set[str]:
   if not texto:
     return set()
   tokens = re.split(r"[^a-z0-9]+", texto)
-  return {token for token in tokens if token}
+  return {token for token in tokens if token and token not in _TOKENS_IRRELEVANTES}
 
 
-def construir_perfil_producto(product: dict[str, object | None]) -> str:
-  parts = [normalizar_texto_similitud(product.get("nombre"))]
-  marca = normalizar_texto_similitud(product.get("marca"))
-  categoria = normalizar_texto_similitud(product.get("categoria"))
-  if marca:
-    parts.append(marca)
-  if categoria:
-    parts.append(categoria)
-  profile = " ".join(p for p in parts if p)
-  return profile or normalizar_texto_similitud(product.get("id_producto")) or "producto"
+def _extraer_token_tipo(producto_str: str) -> str | None:
+  """Extrae el token que define el tipo de producto (tv, ssd, earbuds, etc)."""
+  tipos_prioritarios = re.findall(
+    r"\b(televisor|television|tv|pantalla|monitor|smartwatch|"
+    r"audifonos|earbuds|headphone|headphones|"
+    r"ssd|hdd|disco|unidad|hard drive|"
+    r"laptop|computadora|notebook|"
+    r"celular|smartphone|telefono|"
+    r"camara|lente|lens|"
+    r"bocina|speaker|soundbar|"
+    r"tablet|kindle|"
+    r"impresora|printer|"
+    r"consola|xbox|playstation|nintendo|"
+    r"grafica|graphics|radeon|geforce|"
+    r"procesador|processor|cpu|ryzen|core|"
+    r"memoria|ram|ddr|"
+    r"tarjeta|card|"
+    r"cargador|charger|cable|"
+    r"filtro|purificador|purifier|"
+    r"ropa|shirt|pants|zapato|shoe|"
+    r"perfume|cologne|"
+    r"juguete|toy|"
+    r"mueble|furniture|silla|chair|mesa|table|cama|bed|"
+    r"libro|book|"
+    r"bicicleta|bike|"
+    r"licuadora|blender|air fryer|"
+    r"parlante|speaker)\b",
+    producto_str.lower(),
+  )
+  if tipos_prioritarios:
+    return tipos_prioritarios[0]
+  return None
 
 
-def similitud_difusa(left_text: str, right_text: str) -> float:
-  """Calcula una similitud difusa (token-aware) entre dos cadenas.
+def _calcular_penalizacion_categoria(
+  cat_objetivo: str, cat_candidato: str, marca_coincide: bool
+) -> float:
+  """Calcula penalizacion cuando las categorias no coinciden.
 
-  Utiliza `token_sort_ratio` y `token_set_ratio` de rapidfuzz cuando está
-  disponible y devuelve una puntuación normalizada en [0.0, 1.0]. Maneja
-  mejor las palabras reordenadas y solapamientos parciales que la distancia
-  de Levenshtein para nombres de producto.
+  Retorna un factor multiplicativo entre 0.0 y 1.0.
   """
-  valorIzquierdo = normalizar_texto_similitud(left_text)
-  valorDerecho = normalizar_texto_similitud(right_text)
-  if not valorIzquierdo and not valorDerecho:
+  if not cat_objetivo or not cat_candidato:
     return 1.0
-  if not valorIzquierdo or not valorDerecho:
+  if cat_objetivo == cat_candidato:
+    return 1.0
+
+  # Penalizar significativamente si es diferente categoria
+  # Si ademas la marca no coincide, la penalizacion es maxima
+  return 0.25 if marca_coincide else 0.15
+
+
+def construir_perfil_producto(producto: dict[str, object | None]) -> str:
+  """Construye un perfil textual del producto para busqueda de similitud."""
+  partes = [normalizar_texto_similitud(producto.get("nombre"))]
+  marca = normalizar_texto_similitud(producto.get("marca"))
+  categoria = normalizar_texto_similitud(producto.get("categoria"))
+  if marca:
+    partes.append(marca)
+  if categoria:
+    partes.append(categoria)
+  perfil = " ".join(p for p in partes if p)
+  return perfil or normalizar_texto_similitud(producto.get("id_producto")) or "producto"
+
+
+def similitud_difusa(texto_izquierdo: str, texto_derecho: str) -> float:
+  """Calcula similitud difusa (token-aware) entre dos cadenas.
+
+  Usa token_sort_ratio y token_set_ratio de rapidfuzz cuando esta disponible.
+  Retorna un valor normalizado en [0.0, 1.0].
+  """
+  valor_izquierdo = normalizar_texto_similitud(texto_izquierdo)
+  valor_derecho = normalizar_texto_similitud(texto_derecho)
+  if not valor_izquierdo and not valor_derecho:
+    return 1.0
+  if not valor_izquierdo or not valor_derecho:
     return 0.0
 
-  # las proporciones basadas en tokens están en escala 0-100
-  if _HAS_RAPIDFUZZ and fuzz is not None:
+  if _TIENE_RAPIDFUZZ and fuzz is not None:
     try:
-      ts = float(fuzz.token_sort_ratio(valorIzquierdo, valorDerecho))
-      tset = float(fuzz.token_set_ratio(valorIzquierdo, valorDerecho))
+      ts = float(fuzz.token_sort_ratio(valor_izquierdo, valor_derecho))
+      tset = float(fuzz.token_set_ratio(valor_izquierdo, valor_derecho))
     except Exception:
-      ts = float(fuzz.ratio(valorIzquierdo, valorDerecho))
+      ts = float(fuzz.ratio(valor_izquierdo, valor_derecho))
       tset = ts
   else:
-    ratio = difflib.SequenceMatcher(None, valorIzquierdo, valorDerecho).ratio()
-    ts = ratio * 100.0
+    proporcion = difflib.SequenceMatcher(None, valor_izquierdo, valor_derecho).ratio()
+    ts = proporcion * 100.0
     tset = ts
 
-  # se da preferencia a token_set (maneja solapamientos parciales) pero manteniendo influencia de token_sort
+  # Prioriza token_set (mejor para solapamientos parciales) con influencia de token_sort
   puntuacion_base = (0.6 * tset + 0.4 * ts) / 100.0
-
-  # Los bonos por marca/categoría se aplican en la función llamante donde
-  # estén disponibles los diccionarios de producto.
   return max(0.0, min(1.0, float(puntuacion_base)))
 
 
+def _coincide_marca(marca_objetivo: str, candidato: dict) -> bool:
+  """Verifica si la marca del candidato coincide con la marca objetivo."""
+  if not marca_objetivo:
+    return False
+  marca_candidato = normalizar_texto_similitud(candidato.get("marca"))
+  return bool(marca_candidato) and marca_objetivo == marca_candidato
+
+
+def _tokens_significativos(tokens: set[str]) -> set[str]:
+  """Filtra solo tokens de 3+ caracteres, excluyendo irrelevantes."""
+  return {t for t in tokens if len(t) >= 3 and t not in _TOKENS_IRRELEVANTES}
+
+
 def rankear_productos_similares(
-  target_product: dict[str, object | None],
-  catalog: list[dict[str, object | None]],
+  producto_objetivo: dict[str, object | None],
+  catalogo: list[dict[str, object | None]],
   limit: int = 5,
   exclude_product_id: str | None = None,
 ) -> list[dict[str, object | None]]:
-  """Busca productos similares usando enfoque tipo 'Filtro de Excel'.
-  
-  Funciona como un filtro: busca productos que CONTENGAN las palabras clave
-  del producto objetivo en su nombre, marca o categoría.
-  
+  """Busca productos similares usando enfoque de filtro textual.
+
+  Funciona como un filtro de Excel: busca productos que contengan las
+  palabras clave del producto objetivo en nombre, marca o categoria.
+
   Criterios de ranking:
-  1. Cantidad de palabras clave significativas coincidentes (3+ caracteres)
-  2. Coincidencia de marca exacta
-  3. Coincidencia de categoría exacta
+  1. Cantidad de tokens significativos coincidentes (3+ caracteres)
+  2. Coincidencia exacta de marca
+  3. Penalizacion por categoria diferente
+  4. Coincidencia de tipo de producto
   """
-  if not catalog:
+  if not catalogo:
     return []
 
   id_excluido = str(exclude_product_id or "").strip().upper() or None
-
-  # Obtener palabras clave del producto objetivo (solo del nombre, sin acentos)
-  nombre_objetivo = normalizar_texto_similitud(target_product.get("nombre"))
+  nombre_objetivo = normalizar_texto_similitud(producto_objetivo.get("nombre"))
   tokens_objetivo = tokenizar_texto(nombre_objetivo)
-  
-  # Filtrar tokens muy cortos (< 3 caracteres) para enfocarse en palabras significativas
-  tokens_objetivo_significativos = {t for t in tokens_objetivo if len(t) >= 3}
-  
-  # Si no hay tokens significativos, usar todos pero con peso menor
+
+  tokens_objetivo_significativos = _tokens_significativos(tokens_objetivo)
   if not tokens_objetivo_significativos:
-    tokens_objetivo_significativos = {t for t in tokens_objetivo if len(t) > 1}
-  
+    tokens_objetivo_significativos = {t for t in tokens_objetivo if len(t) > 1 and t not in _TOKENS_IRRELEVANTES}
   if not tokens_objetivo_significativos:
-    # Si no hay tokens válidos, devolver los primeros productos con precio
     return [
       {
         "id_producto": p.get("id_producto"),
@@ -141,88 +208,82 @@ def rankear_productos_similares(
         "similarity_score": 0.0,
         "price_gap_percent": None,
       }
-      for p in catalog if p.get("precio_actual") is not None
+      for p in catalogo if p.get("precio_actual") is not None
     ][:limit]
 
-  # Obtener marca y categoría objetivo normalizadas para comparación exacta
-  marca_objetivo = normalizar_texto_similitud(target_product.get("marca"))
-  categoria_objetivo = normalizar_texto_similitud(target_product.get("categoria"))
+  marca_objetivo = normalizar_texto_similitud(producto_objetivo.get("marca"))
+  categoria_objetivo = normalizar_texto_similitud(producto_objetivo.get("categoria"))
+  nombre_objetivo_largo = (nombre_objetivo + " " + marca_objetivo + " " + categoria_objetivo).strip()
+  tipo_objetivo = _extraer_token_tipo(nombre_objetivo_largo)
 
-  productos_puntuados: list[tuple[tuple[int, int, int, float], dict[str, object | None]]] = []
+  total_tokens_objetivo = max(len(tokens_objetivo_significativos), 1)
+  productos_puntuados: list[tuple[tuple[float, int, int, float], dict[str, object | None], int]] = []
 
-  for candidato in catalog:
+  for candidato in catalogo:
     id_candidato = str(candidato.get("id_producto") or "").strip().upper()
     if id_excluido and id_candidato == id_excluido:
       continue
 
-    # Obtener tokens del producto candidato
     nombre_candidato = normalizar_texto_similitud(candidato.get("nombre"))
     tokens_candidato = tokenizar_texto(nombre_candidato)
-    tokens_candidato_significativos = {t for t in tokens_candidato if len(t) >= 3}
-    
-    # Contar coincidencias de tokens significativos
-    tokens_comunes_significativos = tokens_objetivo_significativos.intersection(tokens_candidato_significativos)
-    num_tokens_coincidentes = len(tokens_comunes_significativos)
-    
-    # No incluir si no hay coincidencias en tokens significativos
-    if num_tokens_coincidentes == 0:
-      # Fallback: buscar al menos algún token en común (incluso cortos)
+    tokens_candidato_significativos = _tokens_significativos(tokens_candidato)
+
+    tokens_comunes = tokens_objetivo_significativos.intersection(tokens_candidato_significativos)
+    num_coincidentes = len(tokens_comunes)
+
+    if num_coincidentes == 0:
       tokens_comunes_todos = tokens_objetivo.intersection(tokens_candidato)
       if not tokens_comunes_todos:
         continue
-      # Contar solo para ranking, pero con baja prioridad
-      num_tokens_coincidentes = len(tokens_comunes_todos) * 0.5
-    
+      num_coincidentes = len(tokens_comunes_todos) * 0.3
 
-    # Verificar coincidencia de marca (exacta)
-    marca_coincide = 0
-    if marca_objetivo and marca_objetivo == normalizar_texto_similitud(candidato.get("marca")):
-      marca_coincide = 1
+    marca_coincide = _coincide_marca(marca_objetivo, candidato)
 
-    # Verificar coincidencia de categoría (exacta)
-    categoria_coincide = 0
-    if categoria_objetivo and categoria_objetivo == normalizar_texto_similitud(candidato.get("categoria")):
-      categoria_coincide = 1
+    # Penalizacion por categoria diferente
+    cat_candidato = normalizar_texto_similitud(candidato.get("categoria"))
+    factor_categoria = _calcular_penalizacion_categoria(categoria_objetivo, cat_candidato, marca_coincide)
 
-    # Proporción de tokens coincidentes vs totales (mayor = mejor)
-    total_tokens_objetivo = len(tokens_objetivo_significativos)
-    proporcion_tokens = num_tokens_coincidentes / max(total_tokens_objetivo, 1)
+    # Umbral minimo segun categoria
+    umbral_minimo = 3 if factor_categoria < 0.5 else 2
+    if not marca_coincide and num_coincidentes < umbral_minimo:
+      continue
 
-    # Tuple para ordenamiento: 
-    # (más tokens significativos, marca coincide, categoría coincide, proporción)
-    # Usamos negativo para ordenar descendente en los primeros 3
-    clave_ordenamiento = (-num_tokens_coincidentes, -marca_coincide, -categoria_coincide, -proporcion_tokens)
-    
-    productos_puntuados.append((clave_ordenamiento, candidato))
+    # Coincidencia de tipo de producto
+    nombre_candidato_largo = (nombre_candidato + " " + normalizar_texto_similitud(candidato.get("marca") or "")).strip()
+    tipo_candidato = _extraer_token_tipo(nombre_candidato_largo)
+    tipo_coincide = 1 if (tipo_objetivo and tipo_candidato and tipo_objetivo == tipo_candidato) else 0
 
-  # Ordenar por relevancia
+    coincidencia_exacta_categoria = 1 if (categoria_objetivo and cat_candidato and categoria_objetivo == cat_candidato) else 0
+
+    proporcion_tokens = num_coincidentes / total_tokens_objetivo
+
+    # Puntuacion compuesta: prioriza tokens coincidentes, tipo de producto, marca, categoria
+    puntuacion_compuesta = (
+      num_coincidentes * 10.0
+      + tipo_coincide * 5.0
+      + int(marca_coincide) * 3.0
+      + coincidencia_exacta_categoria * 2.0
+      + proporcion_tokens * 1.0
+    ) * factor_categoria
+
+    clave_ordenamiento = (-puntuacion_compuesta, -num_coincidentes, -tipo_coincide, -coincidencia_exacta_categoria, -proporcion_tokens)
+    productos_puntuados.append((clave_ordenamiento, candidato, num_coincidentes))
+
   productos_puntuados.sort(key=lambda x: x[0])
 
-  # Construir resultado
   productos_similares: list[dict[str, object | None]] = []
-  for clave, candidato in productos_puntuados:
+  for clave, candidato, n_coincidentes in productos_puntuados:
     precio_candidato = candidato.get("precio_actual")
-    
-    # Filtrar solo productos con precio válido
     if precio_candidato is None or precio_candidato == 0:
       continue
 
-    precio_objetivo = target_product.get("precio_actual")
+    precio_objetivo = producto_objetivo.get("precio_actual")
     diferencia_precio = None
     if precio_objetivo not in (None, 0):
       diferencia_precio = round(((float(precio_objetivo) - float(precio_candidato)) / float(precio_candidato)) * 100, 2)
 
-    # Calcular similarity_score basado en tokens coincidentes significativos
-    # Máximo 1.0 si coinciden todos los tokens significativos
-    num_coincidentes = -clave[0]  # Recuperar valor original (fue negado para ordenar)
-    num_total = len(tokens_objetivo_significativos)
-    
-    # Si num_coincidentes es fraccionario (0.5, 1.5, etc), es porque usamos fallback
-    # En ese caso, normalizar a rango 0-1
-    if num_total > 0:
-      similarity_score = min(1.0, num_coincidentes / num_total)
-    else:
-      similarity_score = 0.0
+    # Similarity basado en tokens coincidentes sobre total objetivo
+    similarity_score = min(1.0, n_coincidentes / total_tokens_objetivo) if total_tokens_objetivo > 0 else 0.0
 
     productos_similares.append(
       {
@@ -245,8 +306,12 @@ def rankear_productos_similares(
   return productos_similares
 
 
-def resumir_precios_similares(similar_products: Iterable[dict[str, object | None]]) -> tuple[float | None, float | None, float | None]:
-  elementos_con_precio = [elemento for elemento in similar_products if elemento.get("precio_actual") is not None]
+def resumir_precios_similares(productos_similares: Iterable[dict[str, object | None]]) -> tuple[float | None, float | None, float | None]:
+  """Calcula precio promedio ponderado, minimo y maximo de productos similares.
+
+  Los pesos se basan en el similarity_score de cada producto.
+  """
+  elementos_con_precio = [elemento for elemento in productos_similares if elemento.get("precio_actual") is not None]
   if not elementos_con_precio:
     return None, None, None
 
@@ -256,6 +321,3 @@ def resumir_precios_similares(similar_products: Iterable[dict[str, object | None
   precio_minimo = float(np.min(precios))
   precio_maximo = float(np.max(precios))
   return promedio_ponderado, precio_minimo, precio_maximo
-
-
-# Las funciones ahora usan nombres nativos en español (sin alias en inglés)

@@ -11,8 +11,8 @@ import oracledb  # type: ignore[import-not-found]
 from dotenv import load_dotenv
 from passlib.context import CryptContext
 
-ROOT_DIR = Path(__file__).resolve().parents[2]
-load_dotenv(ROOT_DIR / ".env")
+DIR_RAIZ = Path(__file__).resolve().parents[2]
+load_dotenv(DIR_RAIZ / ".env")
 
 DB_USER = os.environ["DB_USER"]
 DB_PASSWORD = os.environ["DB_PASSWORD"]
@@ -21,7 +21,7 @@ WALLET_PATH = os.environ.get("WALLET_PATH") or os.environ.get("WALLET_LOCATION")
 WALLET_PASSWORD = os.environ.get("WALLET_PASSWORD", "")
 
 if not WALLET_PATH:
-    _wallet_root = ROOT_DIR / "wallet"
+    _wallet_root = DIR_RAIZ / "wallet"
     if _wallet_root.is_dir():
         for _child in sorted(_wallet_root.iterdir()):
             if _child.is_dir() and (_child / "tnsnames.ora").is_file():
@@ -31,12 +31,12 @@ if not WALLET_PATH:
 if not WALLET_PATH:
     raise RuntimeError("WALLET_PATH no definido en .env")
 
-wallet_location = Path(WALLET_PATH)
-if not wallet_location.is_absolute():
-    wallet_location = (ROOT_DIR / wallet_location).resolve()
+ubicacion_wallet = Path(WALLET_PATH)
+if not ubicacion_wallet.is_absolute():
+    ubicacion_wallet = (DIR_RAIZ / ubicacion_wallet).resolve()
 
-pwd_context = CryptContext(schemes=["pbkdf2_sha256"], deprecated="auto")
-OUTPUT_TXT = ROOT_DIR / "vendedores_demo.txt"
+contexto_contrasena = CryptContext(schemes=["pbkdf2_sha256"], deprecated="auto")
+ARCHIVO_SALIDA = DIR_RAIZ / "vendedores_demo.txt"
 
 NOMBRES = [
     "Alberto",
@@ -96,30 +96,30 @@ def obtener_conexion():
         user=DB_USER,
         password=DB_PASSWORD,
         dsn=DB_DSN,
-        config_dir=str(wallet_location),
-        wallet_location=str(wallet_location),
+        config_dir=str(ubicacion_wallet),
+        wallet_location=str(ubicacion_wallet),
         wallet_password=WALLET_PASSWORD,
     )
 
 
-def generar_cuentas_vendedores(count: int = 10) -> list[CuentaVendedor]:
-    rng = random.Random(20260525)
-    accounts: list[CuentaVendedor] = []
+def generar_cuentas_vendedores(cantidad: int = 10) -> list[CuentaVendedor]:
+    aleatorio = random.Random(20260525)
+    cuentas: list[CuentaVendedor] = []
 
-    for index in range(1, count + 1):
-        first_name = rng.choice(NOMBRES)
-        last_name = rng.choice(APELLIDOS)
-        second_last_name = rng.choice(APELLIDOS)
-        nombre = f"{first_name} {last_name} {second_last_name}"
-        correo = f"vendedor_demo_{index:02d}@demo.local"
-        contrasena = f"Vnd-{index:02d}-{secrets.token_hex(4)}"
-        telefono = f"55{rng.randint(10000000, 99999999)}"
-        codigo_vendedor = f"V-{3000 + index}"
-        especialidad = rng.choice(ESPECIALIDADES)
-        objetivo_ventas = float(rng.randint(80000, 220000))
+    for indice in range(1, cantidad + 1):
+        nombre_pila = aleatorio.choice(NOMBRES)
+        apellido = aleatorio.choice(APELLIDOS)
+        segundo_apellido = aleatorio.choice(APELLIDOS)
+        nombre = f"{nombre_pila} {apellido} {segundo_apellido}"
+        correo = f"vendedor_demo_{indice:02d}@demo.local"
+        contrasena = f"Vnd-{indice:02d}-{secrets.token_hex(4)}"
+        telefono = f"55{aleatorio.randint(10000000, 99999999)}"
+        codigo_vendedor = f"V-{3000 + indice}"
+        especialidad = aleatorio.choice(ESPECIALIDADES)
+        objetivo_ventas = float(aleatorio.randint(80000, 220000))
         id_usuario = str(uuid.uuid5(uuid.NAMESPACE_URL, correo))
 
-        accounts.append(
+        cuentas.append(
             CuentaVendedor(
                 id_usuario=id_usuario,
                 nombre=nombre,
@@ -132,36 +132,36 @@ def generar_cuentas_vendedores(count: int = 10) -> list[CuentaVendedor]:
             )
         )
 
-    return accounts
+    return cuentas
 
 
 def obtener_productos(cursor):
     cursor.execute("SELECT id_producto FROM productos ORDER BY nombre, id_producto")
-    return [row[0] for row in cursor.fetchall()]
+    return [fila[0] for fila in cursor.fetchall()]
 
 
-def insertar_o_actualizar_vendedores(cursor, accounts: list[CuentaVendedor]) -> tuple[list[tuple[str, str, str]], list[str]]:
-    credentials_rows: list[tuple[str, str, str]] = []
-    vendor_ids: list[str] = []
+def insertar_o_actualizar_vendedores(cursor, cuentas: list[CuentaVendedor]) -> tuple[list[tuple[str, str, str]], list[str]]:
+    filas_credenciales: list[tuple[str, str, str]] = []
+    ids_vendedores: list[str] = []
 
-    for account in accounts:
-        password_hash = pwd_context.hash(account.contrasena)
+    for cuenta in cuentas:
+        hash_contrasena = contexto_contrasena.hash(cuenta.contrasena)
         cursor.execute(
             "SELECT id_usuario FROM usuarios WHERE correo = :correo",
-            {"correo": account.correo},
+            {"correo": cuenta.correo},
         )
-        existing_user = cursor.fetchone()
-        user_id = existing_user[0] if existing_user else account.id_usuario
+        usuario_existente = cursor.fetchone()
+        id_usuario = usuario_existente[0] if usuario_existente else cuenta.id_usuario
 
-        if existing_user:
+        if usuario_existente:
             cursor.execute(
                 "UPDATE usuarios SET nombre = :nombre, telefono = :telefono, tipo_usuario = 'Vendedor', password_hash = :password_hash "
                 "WHERE correo = :correo",
                 {
-                    "nombre": account.nombre,
-                    "telefono": account.telefono,
-                    "password_hash": password_hash,
-                    "correo": account.correo,
+                    "nombre": cuenta.nombre,
+                    "telefono": cuenta.telefono,
+                    "password_hash": hash_contrasena,
+                    "correo": cuenta.correo,
                 },
             )
         else:
@@ -169,31 +169,31 @@ def insertar_o_actualizar_vendedores(cursor, accounts: list[CuentaVendedor]) -> 
                 "INSERT INTO usuarios (id_usuario, nombre, telefono, correo, tipo_usuario, password_hash) "
                 "VALUES (:id_usuario, :nombre, :telefono, :correo, 'Vendedor', :password_hash)",
                 {
-                    "id_usuario": user_id,
-                    "nombre": account.nombre,
-                    "telefono": account.telefono,
-                    "correo": account.correo,
-                    "password_hash": password_hash,
+                    "id_usuario": id_usuario,
+                    "nombre": cuenta.nombre,
+                    "telefono": cuenta.telefono,
+                    "correo": cuenta.correo,
+                    "password_hash": hash_contrasena,
                 },
             )
 
-        vendor_ids.append(user_id)
+        ids_vendedores.append(id_usuario)
 
         cursor.execute(
             "SELECT id_vendedor FROM vendedores WHERE id_vendedor = :id_vendedor",
-            {"id_vendedor": user_id},
+            {"id_vendedor": id_usuario},
         )
-        existing_vendor = cursor.fetchone()
+        vendedor_existente = cursor.fetchone()
 
-        if existing_vendor:
+        if vendedor_existente:
             cursor.execute(
                 "UPDATE vendedores SET codigo_vendedor = :codigo_vendedor, especialidad = :especialidad, objetivo_ventas = :objetivo_ventas "
                 "WHERE id_vendedor = :id_vendedor",
                 {
-                    "codigo_vendedor": account.codigo_vendedor,
-                    "especialidad": account.especialidad,
-                    "objetivo_ventas": account.objetivo_ventas,
-                    "id_vendedor": user_id,
+                    "codigo_vendedor": cuenta.codigo_vendedor,
+                    "especialidad": cuenta.especialidad,
+                    "objetivo_ventas": cuenta.objetivo_ventas,
+                    "id_vendedor": id_usuario,
                 },
             )
         else:
@@ -201,54 +201,54 @@ def insertar_o_actualizar_vendedores(cursor, accounts: list[CuentaVendedor]) -> 
                 "INSERT INTO vendedores (id_vendedor, codigo_vendedor, especialidad, objetivo_ventas) "
                 "VALUES (:id_vendedor, :codigo_vendedor, :especialidad, :objetivo_ventas)",
                 {
-                    "id_vendedor": user_id,
-                    "codigo_vendedor": account.codigo_vendedor,
-                    "especialidad": account.especialidad,
-                    "objetivo_ventas": account.objetivo_ventas,
+                    "id_vendedor": id_usuario,
+                    "codigo_vendedor": cuenta.codigo_vendedor,
+                    "especialidad": cuenta.especialidad,
+                    "objetivo_ventas": cuenta.objetivo_ventas,
                 },
             )
 
-        credentials_rows.append((account.nombre, account.correo, account.contrasena))
+        filas_credenciales.append((cuenta.nombre, cuenta.correo, cuenta.contrasena))
 
-    return credentials_rows, vendor_ids
+    return filas_credenciales, ids_vendedores
 
 
-def asignar_productos(cursor, vendor_ids: list[str]) -> int:
+def asignar_productos(cursor, ids_vendedores: list[str]) -> int:
     cursor.execute("DELETE FROM producto_vendedor")
-    product_ids = obtener_productos(cursor)
-    if not product_ids or not vendor_ids:
+    ids_productos = obtener_productos(cursor)
+    if not ids_productos or not ids_vendedores:
         return 0
 
-    for index, product_id in enumerate(product_ids):
-        vendor_id = vendor_ids[index % len(vendor_ids)]
+    for indice, id_producto in enumerate(ids_productos):
+        id_vendedor = ids_vendedores[indice % len(ids_vendedores)]
         cursor.execute(
             "INSERT INTO producto_vendedor (id_producto, id_vendedor) VALUES (:id_producto, :id_vendedor)",
-            {"id_producto": product_id, "id_vendedor": vendor_id},
+            {"id_producto": id_producto, "id_vendedor": id_vendedor},
         )
 
-    return len(product_ids)
+    return len(ids_productos)
 
 
-def escribir_archivo_credenciales(rows: list[tuple[str, str, str]]) -> None:
-    with OUTPUT_TXT.open("w", encoding="utf-8") as file_handle:
-        file_handle.write("nombre\tcorreo\tcontrasena\n")
-        for nombre, correo, contrasena in rows:
-            file_handle.write(f"{nombre}\t{correo}\t{contrasena}\n")
+def escribir_archivo_credenciales(filas: list[tuple[str, str, str]]) -> None:
+    with ARCHIVO_SALIDA.open("w", encoding="utf-8") as manejador_archivo:
+        manejador_archivo.write("nombre\tcorreo\tcontrasena\n")
+        for nombre, correo, contrasena in filas:
+            manejador_archivo.write(f"{nombre}\t{correo}\t{contrasena}\n")
 
 
 def principal() -> None:
-    accounts = generar_cuentas_vendedores(10)
+    cuentas = generar_cuentas_vendedores(10)
 
-    with obtener_conexion() as connection:
-        with connection.cursor() as cursor:
-            credentials_rows, vendor_ids = insertar_o_actualizar_vendedores(cursor, accounts)
-            assigned = asignar_productos(cursor, vendor_ids)
-        connection.commit()
+    with obtener_conexion() as conexion:
+        with conexion.cursor() as cursor:
+            filas_credenciales, ids_vendedores = insertar_o_actualizar_vendedores(cursor, cuentas)
+            asignados = asignar_productos(cursor, ids_vendedores)
+        conexion.commit()
 
-    escribir_archivo_credenciales(credentials_rows)
+    escribir_archivo_credenciales(filas_credenciales)
     print(
         "Redistribucion completada: "
-        f"10 vendedores listos, {assigned} productos repartidos y credenciales guardadas en {OUTPUT_TXT}."
+        f"10 vendedores listos, {asignados} productos repartidos y credenciales guardadas en {ARCHIVO_SALIDA}."
     )
 
 

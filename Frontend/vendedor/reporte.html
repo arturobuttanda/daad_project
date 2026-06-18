@@ -1,0 +1,182 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Reporte financiero - NexusMarket</title>
+  <link rel="stylesheet" href="../css/estilo.css" />
+</head>
+<body>
+  <div class="contenedor-layout">
+    <!-- SIDEBAR -->
+    <aside class="sidebar" id="sidebar">
+      <div style="padding:0 1.25rem 1rem; border-bottom:1px solid var(--borde-suave); margin-bottom:0.5rem;">
+        <div class="logo" style="font-size:1rem;">Nexus<span>Market</span></div>
+      </div>
+      <ul class="sidebar-nav">
+        <li><a href="inventario.html">
+          <svg class="icono" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/></svg>
+          <span class="texto-nav">Inventario</span>
+        </a></li>
+        <li><a href="reporte.html" class="activo">
+          <svg class="icono" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 20V10"/><path d="M12 20V4"/><path d="M6 20v-6"/></svg>
+          <span class="texto-nav">Finanzas</span>
+        </a></li>
+      </ul>
+      <div style="padding:1rem 1.25rem; margin-top:auto;">
+        <button class="btn btn-sm btn-block" style="border:1px solid var(--error); color:var(--error);" onclick="cerrarSesionNav()">Cerrar sesion</button>
+      </div>
+    </aside>
+
+    <!-- CONTENIDO PRINCIPAL -->
+    <main class="contenido-principal">
+      <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:1.5rem; flex-wrap:wrap; gap:0.75rem;">
+        <div>
+          <small style="color:var(--texto-suave); text-transform:uppercase; font-weight:600; letter-spacing:0.05em;">Reporte Financiero</small>
+          <h1 id="tituloReporte" style="font-size:1.5rem; font-weight:700; color:var(--texto);">Dashboard de rendimiento</h1>
+        </div>
+        <div style="display:flex; gap:0.5rem;">
+          <button class="btn btn-secundario btn-sm" onclick="descargarCSV()">Descargar CSV</button>
+         
+        </div>
+      </div>
+
+      <!-- INDICADORES PRINCIPALES -->
+      <div class="grid-estadisticas" id="indicadores">
+        <div class="tarjeta-estadistica"><div class="valor" style="font-size:1.25rem;" id="valIngresos">---</div><div class="etiqueta-est">Ingresos totales</div></div>
+        <div class="tarjeta-estadistica"><div class="valor" style="font-size:1.25rem;" id="valCostos">---</div><div class="etiqueta-est">Costos totales</div></div>
+        <div class="tarjeta-estadistica"><div class="valor" style="font-size:1.25rem;" id="valGanancia">---</div><div class="etiqueta-est">Ganancia</div></div>
+        <div class="tarjeta-estadistica"><div class="valor" style="font-size:1.25rem;" id="valMargen">---</div><div class="etiqueta-est">Margen</div></div>
+        <div class="tarjeta-estadistica"><div class="valor" style="font-size:1.25rem;" id="valVentas">---</div><div class="etiqueta-est">Total ventas</div></div>
+        <div class="tarjeta-estadistica"><div class="valor" style="font-size:1.25rem;" id="valTicket">---</div><div class="etiqueta-est">Ticket promedio</div></div>
+        <div class="tarjeta-estadistica"><div class="valor" style="font-size:1.25rem;" id="valStockBajo">---</div><div class="etiqueta-est">Stock bajo</div></div>
+        <div class="tarjeta-estadistica"><div class="valor" style="font-size:1.25rem;" id="valEstancados">---</div><div class="etiqueta-est">Estancados</div></div>
+      </div>
+
+      <!-- GRAFICAS -->
+      <div style="display:grid; grid-template-columns:1fr 1fr; gap:1rem; margin-bottom:1.5rem;">
+        <div id="graficoIngresos"></div>
+        <div id="graficoDistribucion"></div>
+      </div>
+
+      <div id="graficoTopProductos"></div>
+
+      <!-- RECOMENDACIONES -->
+      <div class="tarjeta-simple" id="seccionRecomendaciones" style="margin-top:1rem;">
+        <h3 style="font-size:1rem; font-weight:700; color:var(--texto); margin-bottom:0.75rem;">Recomendaciones</h3>
+        <div id="listaRecomendaciones">
+          <p style="color:var(--texto-suave); font-size:0.875rem;">Cargando recomendaciones...</p>
+        </div>
+      </div>
+    </main>
+  </div>
+
+  <script src="../js/utilerias.js"></script>
+  <script src="../js/api.js"></script>
+  <script src="../js/graficos.js"></script>
+  <script>
+    const usuario = obtenerUsuario();
+    if (!usuario.registrado || usuario.tipo !== "Vendedor") {
+      window.location.href = "../iniciar-sesion.html";
+    }
+
+    let datosIndicadores = null;
+
+    async function cargarIndicadores() {
+      try {
+        const idVendedor = usuario.id || undefined;
+        const datos = await Api.obtenerIndicadoresVendedor(idVendedor);
+        datosIndicadores = datos;
+        renderizarIndicadores(datos);
+        renderizarRecomendaciones(datos);
+        cargarVentasMensuales(idVendedor);
+        cargarTopProductos(idVendedor);
+      } catch (error) {
+        mostrarNotificacion("Error al cargar indicadores: " + error.message, "error");
+        document.getElementById("valIngresos").textContent = "$0.00";
+        document.getElementById("valCostos").textContent = "$0.00";
+        document.getElementById("valGanancia").textContent = "$0.00";
+        document.getElementById("valMargen").textContent = "0%";
+        document.getElementById("valVentas").textContent = "0";
+        document.getElementById("valTicket").textContent = "$0.00";
+        document.getElementById("valStockBajo").textContent = "0";
+        document.getElementById("valEstancados").textContent = "0";
+      }
+    }
+
+    async function cargarVentasMensuales(idVendedor) {
+      try {
+        const datos = await Api.obtenerVentasMensuales(idVendedor, 6);
+        const ingresos = datos.map(d => ({ etiqueta: d.etiqueta, valor: d.ingresos }));
+        const ganancia = datos.map(d => ({ etiqueta: d.etiqueta, valor: d.ganancia }));
+        Graficos.lineas("graficoIngresos", [
+          { etiqueta: "Ingresos", valores: ingresos, color: "#d97706" },
+          { etiqueta: "Ganancia", valores: ganancia, color: "#16a34a" },
+        ], "Ingresos vs Ganancia por mes");
+      } catch (e) {
+        Graficos.barras("graficoIngresos", [], "Ingresos por mes (sin datos)");
+      }
+    }
+
+    async function cargarTopProductos(idVendedor) {
+      try {
+        const datos = await Api.obtenerTopProductos(idVendedor, 10);
+        if (datos.length > 0) {
+          const barras = datos.map(d => ({
+            etiqueta: truncarTexto(d.nombre || d.id_producto, 30),
+            valor: d.cantidad_vendida,
+          }));
+          Graficos.barras("graficoTopProductos", barras, "Top productos mas vendidos");
+        } else {
+          Graficos.barras("graficoTopProductos", [], "Top productos (sin datos)");
+        }
+      } catch (e) {
+        Graficos.barras("graficoTopProductos", [], "Top productos (sin datos)");
+      }
+    }
+
+    function renderizarIndicadores(datos) {
+      document.getElementById("valIngresos").textContent = formatearDinero(datos.revenue);
+      document.getElementById("valCostos").textContent = formatearDinero(datos.total_cost);
+      document.getElementById("valGanancia").textContent = formatearDinero(datos.profit);
+      document.getElementById("valMargen").textContent = datos.margin_percent + "%";
+      document.getElementById("valVentas").textContent = datos.total_sales || 0;
+      document.getElementById("valTicket").textContent = formatearDinero(datos.avg_ticket);
+      document.getElementById("valStockBajo").textContent = datos.low_stock_products || 0;
+      document.getElementById("valEstancados").textContent = datos.stagnant_products || 0;
+    }
+
+    function renderizarRecomendaciones(datos) {
+      const div = document.getElementById("listaRecomendaciones");
+      const recomendaciones = [];
+
+      if (datos.low_stock_products > 0) {
+        recomendaciones.push(`Hay ${datos.low_stock_products} productos con stock bajo. Considera reabastecerlos pronto.`);
+      }
+      if (datos.margin_percent < 20) {
+        recomendaciones.push(`El margen de ganancia (${datos.margin_percent}%) esta por debajo del recomendado. Revisa tus precios.`);
+      }
+      if (datos.avg_ticket > 0 && datos.avg_ticket < 500) {
+        recomendaciones.push("El ticket promedio es bajo. Considera estrategias de venta cruzada.");
+      }
+      if (recomendaciones.length === 0) {
+        recomendaciones.push("No hay recomendaciones pendientes. El sistema se encuentra en buen estado.");
+      }
+
+      div.innerHTML = recomendaciones.map((r) =>
+        `<p style="font-size:0.875rem; color:var(--texto); padding:0.5rem 0; border-bottom:1px solid var(--borde-suave);">• ${r}</p>`
+      ).join("");
+    }
+
+    function descargarCSV() {
+      Api.descargarReporteVentas("all");
+    }
+
+    function cerrarSesionNav() {
+      cerrarSesion();
+    }
+
+    cargarIndicadores();
+  </script>
+</body>
+</html>

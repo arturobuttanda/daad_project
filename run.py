@@ -7,114 +7,135 @@ import shutil
 import platform
 import time
 import venv
+import webbrowser
 from pathlib import Path
 
-ROOT = Path(__file__).resolve().parent
-VENV_DIR = ROOT / ".venv"
+RAIZ = Path(__file__).resolve().parent
+DIR_VENV = RAIZ / ".venv"
 
 
 def obtener_python_venv() -> Path:
     if platform.system() == "Windows":
-        return VENV_DIR / "Scripts" / "python.exe"
-    return VENV_DIR / "bin" / "python"
+        return DIR_VENV / "Scripts" / "python.exe"
+    return DIR_VENV / "bin" / "python"
 
 
-def ensure_venv() -> Path:
-    if not VENV_DIR.exists():
+def asegurar_venv() -> Path:
+    if not DIR_VENV.exists():
         print("Creando entorno virtual en .venv...")
-        venv.create(VENV_DIR, with_pip=True)
+        venv.create(DIR_VENV, with_pip=True)
     else:
         print("Entorno virtual encontrado (.venv)")
-    python_path = obtener_python_venv()
-    if not python_path.exists():
-        raise RuntimeError(f"No se encontró el intérprete de Python en {python_path}")
-    return python_path
+    ruta_python = obtener_python_venv()
+    if not ruta_python.exists():
+        raise RuntimeError(f"No se encontro el interprete de Python en {ruta_python}")
+    return ruta_python
 
 
-def run_check(cmd: list[str], cwd: Path | None = None, env: dict | None = None):
-    print(f"Ejecutando: {' '.join(cmd)}")
-    subprocess.check_call(cmd, cwd=cwd, env=env)
-
-
-def start_process(cmd: list[str], cwd: Path | None = None, env: dict | None = None) -> subprocess.Popen:
-    print(f"Iniciando: {' '.join(cmd)} (cwd={cwd})")
-    return subprocess.Popen(cmd, cwd=cwd, env=env)
-
-
-def main():
-    python = ensure_venv()
-
-    # Actualizar pip e instalar dependencias Python
-    try:
-        try:
-            run_check([str(python), "-m", "pip", "install", "--upgrade", "pip"])
-        except KeyboardInterrupt:
-            print("Instalación de pip interrumpida por el usuario; continuo sin actualizar pip.")
-
-        if (ROOT / "requirements.txt").exists():
-            try:
-                run_check([str(python), "-m", "pip", "install", "-r", str(ROOT / "requirements.txt")])
-            except KeyboardInterrupt:
-                print("Instalación de dependencias interrumpida por el usuario; continúo.")
-        else:
-            print("No se encontró requirements.txt, omitiendo instalación de dependencias Python.")
-    except subprocess.CalledProcessError:
-        print("Error instalando dependencias Python. Revisa mensajes previos.")
-
-    # Instalar dependencias frontend si npm está disponible
-    node = shutil.which("node")
-    npm = shutil.which("npm")
-    frontend_dir = ROOT / "Frontend"
-    if node and npm and frontend_dir.exists():
-        try:
-            try:
-                run_check([npm, "install"], cwd=frontend_dir)
-            except KeyboardInterrupt:
-                print("'npm install' interrumpido por el usuario; continúo.")
-        except subprocess.CalledProcessError:
-            print("Error en 'npm install'. Continúo igual.")
+def ejecutar_comando(comando: list[str], cwd: Path | None = None, env: dict | None = None, silencioso: bool = False):
+    if silencioso:
+        subprocess.check_call(comando, cwd=cwd, env=env, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
     else:
-        print("Node/npm no disponible o carpeta Frontend ausente. Salta instalación frontend.")
+        print(f"Ejecutando: {' '.join(comando)}")
+        subprocess.check_call(comando, cwd=cwd, env=env)
 
-    # Variables de entorno para procesos (heredan las actuales)
-    env = os.environ.copy()
 
-    # Iniciar backend con uvicorn usando el python del venv
-    backend_proc = None
+def iniciar_proceso(comando: list[str], cwd: Path | None = None, env: dict | None = None, stdout=None, stderr=None) -> subprocess.Popen:
+    return subprocess.Popen(comando, cwd=cwd, env=env, stdout=stdout, stderr=stderr)
+
+
+def principal():
+    python = asegurar_venv()
+
+    # Instalar dependencias Python de forma silenciosa
     try:
-        backend_cmd = [str(python), "-m", "uvicorn", "Backend.app:app", "--reload", "--host", "0.0.0.0", "--port", "8000"]
-        backend_proc = start_process(backend_cmd, cwd=ROOT, env=env)
+        print("Verificando dependencias de Python (esto puede tomar unos segundos)...")
+        try:
+            ejecutar_comando([str(python), "-m", "pip", "install", "--upgrade", "pip"], silencioso=True)
+        except KeyboardInterrupt:
+            print("Instalacion de pip interrumpida; continuo sin actualizar.")
+
+        if (RAIZ / "requirements.txt").exists():
+            try:
+                ejecutar_comando([str(python), "-m", "pip", "install", "-r", str(RAIZ / "requirements.txt")], silencioso=True)
+            except KeyboardInterrupt:
+                print("Instalacion de dependencias interrumpida; continuo.")
+        else:
+            print("No se encontro requirements.txt, omitiendo instalacion.")
+    except subprocess.CalledProcessError:
+        print("Nota: Hubo un detalle al verificar dependencias, pero continuaremos con la ejecucion.")
+
+    env = os.environ.copy()
+    DIR_FRONTEND = RAIZ / "Frontend"
+
+    # Preparar archivos de log para que no ensucien la terminal
+    log_out = open(RAIZ / "server_out.log", "a", encoding="utf-8")
+    log_err = open(RAIZ / "server_err.log", "a", encoding="utf-8")
+
+    # Iniciar backend con uvicorn
+    proceso_backend = None
+    try:
+        comando_backend = [
+            str(python), "-m", "uvicorn", "Backend.app:app",
+            "--reload", "--host", "127.0.0.1", "--port", "8000",
+        ]
+        proceso_backend = iniciar_proceso(comando_backend, cwd=RAIZ, env=env, stdout=log_out, stderr=log_err)
     except Exception as exc:
         print(f"No se pudo iniciar el backend: {exc}")
 
-    # Iniciar frontend con npm (dev)
-    frontend_proc = None
-    if npm and frontend_dir.exists():
-        try:
-            frontend_proc = start_process([npm, "run", "dev"], cwd=frontend_dir, env=env)
-        except Exception as exc:
-            print(f"No se pudo iniciar el frontend: {exc}")
+    # Iniciar servidor estatico para el frontend HTML
+    proceso_frontend = None
+    if DIR_FRONTEND.exists():
+        # Asegurar que la imagen de login este en el frontend
+        imagen_origen = RAIZ / "ImagenLogin.png"
+        imagen_destino = DIR_FRONTEND / "ImagenLogin.png"
+        if imagen_origen.exists():
+            try:
+                shutil.copy2(imagen_origen, imagen_destino)
+            except Exception:
+                pass
 
-    print("Backend: http://127.0.0.1:8000")
-    print("Frontend: http://localhost:5173 (si npm se inició correctamente)")
+        try:
+            # Usar Python para servir los archivos estaticos del frontend
+            comando_frontend = [
+                str(python), "-m", "http.server", "5180",
+                "--directory", str(DIR_FRONTEND),
+            ]
+            proceso_frontend = iniciar_proceso(comando_frontend, cwd=DIR_FRONTEND, env=env, stdout=log_out, stderr=log_err)
+        except Exception as exc:
+            print(f"No se pudo iniciar el servidor frontend: {exc}")
+    else:
+        print("Carpeta Frontend no encontrada.")
+
+    print("\n" + "="*60)
+    print("  Frontend: http://localhost:5180/iniciar-sesion.html")
+    print("  Backend:  http://127.0.0.1:8000")
+
+
+    # Abrir automaticamente el navegador despues de 1.5 segundos
+    try:
+        time.sleep(1.5)
+        webbrowser.open("http://localhost:5180/iniciar-sesion.html")
+    except Exception:
+        pass
 
     # Esperar procesos
     try:
         while True:
             time.sleep(1)
-            if backend_proc and backend_proc.poll() is not None:
+            if proceso_backend and proceso_backend.poll() is not None:
                 print("El backend ha terminado.")
                 break
-            if frontend_proc and frontend_proc.poll() is not None:
-                print("El frontend ha terminado.")
+            if proceso_frontend and proceso_frontend.poll() is not None:
+                print("El servidor frontend ha terminado.")
                 break
     except KeyboardInterrupt:
         print("Deteniendo procesos...")
-        if backend_proc:
-            backend_proc.terminate()
-        if frontend_proc:
-            frontend_proc.terminate()
+        if proceso_backend:
+            proceso_backend.terminate()
+        if proceso_frontend:
+            proceso_frontend.terminate()
 
 
 if __name__ == "__main__":
-    main()
+    principal()

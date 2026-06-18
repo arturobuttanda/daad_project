@@ -30,23 +30,23 @@ logger = logging.getLogger(__name__)
 
 def cargar_env() -> None:
     """Carga variables desde el .env del proyecto si no existen en el entorno."""
-    project_root = Path(__file__).resolve().parents[2]
-    env_path = project_root / ".env"
-    if not env_path.exists():
+    raiz_proyecto = Path(__file__).resolve().parents[2]
+    ruta_env = raiz_proyecto / ".env"
+    if not ruta_env.exists():
         return
 
-    with env_path.open("r", encoding="utf-8") as file:
-        for raw_line in file:
-            line = raw_line.strip()
-            if not line or line.startswith("#"):
+    with ruta_env.open("r", encoding="utf-8") as archivo:
+        for linea_cruda in archivo:
+            linea = linea_cruda.strip()
+            if not linea or linea.startswith("#"):
                 continue
-            if "=" not in line:
+            if "=" not in linea:
                 continue
 
-            key, value = line.split("=", 1)
-            key = key.strip()
-            value = value.strip().strip('"').strip("'")
-            os.environ.setdefault(key, value)
+            clave, valor = linea.split("=", 1)
+            clave = clave.strip()
+            valor = valor.strip().strip('"').strip("'")
+            os.environ.setdefault(clave, valor)
 
 
 cargar_env()
@@ -57,17 +57,17 @@ DB_PASSWORD = os.environ["DB_PASSWORD"]
 DB_DSN = os.environ["DB_DSN"]
 WALLET_LOCATION = os.environ.get("WALLET_LOCATION") or os.environ.get("WALLET_PATH")
 if not WALLET_LOCATION:
-    _project_root = Path(__file__).resolve().parents[2]
-    _wallet_root = _project_root / "wallet"
-    if _wallet_root.is_dir():
-        for _child in sorted(_wallet_root.iterdir()):
-            if _child.is_dir() and (_child / "tnsnames.ora").is_file():
-                WALLET_LOCATION = str(_child.resolve())
+    _raiz_proyecto = Path(__file__).resolve().parents[2]
+    _raiz_wallet = _raiz_proyecto / "wallet"
+    if _raiz_wallet.is_dir():
+        for _hijo in sorted(_raiz_wallet.iterdir()):
+            if _hijo.is_dir() and (_hijo / "tnsnames.ora").is_file():
+                WALLET_LOCATION = str(_hijo.resolve())
                 break
 if not WALLET_LOCATION:
-    _legacy = Path(__file__).resolve().parents[2] / "Backend" / "ConexionDB" / "Wallet"
-    if (_legacy / "tnsnames.ora").is_file():
-        WALLET_LOCATION = str(_legacy.resolve())
+    _legado = Path(__file__).resolve().parents[2] / "Backend" / "ConexionDB" / "Wallet"
+    if (_legado / "tnsnames.ora").is_file():
+        WALLET_LOCATION = str(_legado.resolve())
 if not WALLET_LOCATION:
     raise RuntimeError(
         "WALLET_LOCATION no definido. "
@@ -77,7 +77,7 @@ WALLET_PASSWORD = os.environ.get("WALLET_PASSWORD", "")
 
 DEFAULT_PRODUCTOS = Path.home() / "Downloads" / "Productos.csv"
 DEFAULT_HISTORIAL = Path.home() / "Downloads" / "Historial Precios.csv"
-DEFAULT_BATCH_SIZE = 1000
+DEFAULT_TAMANO_LOTE = 1000
 
 
 SQL_MERGE_PRODUCTOS = """
@@ -106,102 +106,102 @@ WHEN NOT MATCHED THEN
 """
 
 
-def normalizar_texto(value: Any) -> str:
-    if value is None:
+def normalizar_texto(valor: Any) -> str:
+    if valor is None:
         return ""
-    return re.sub(r"\s+", " ", str(value)).strip()
+    return re.sub(r"\s+", " ", str(valor)).strip()
 
 
-def parsear_numero(value: Any) -> float:
-    text = normalizar_texto(value)
-    if not text:
+def parsear_numero(valor: Any) -> float:
+    texto = normalizar_texto(valor)
+    if not texto:
         raise ValueError("Valor numerico vacio")
-    return float(text)
+    return float(texto)
 
 
-def parsear_timestamp(value: Any) -> datetime:
-    text = normalizar_texto(value)
-    if not text:
+def parsear_timestamp(valor: Any) -> datetime:
+    texto = normalizar_texto(valor)
+    if not texto:
         raise ValueError("Fecha vacia")
 
-    text = text.replace("T", " ")
-    if "." in text:
-        head, fraction = text.split(".", 1)
-        fraction = re.sub(r"\D", "", fraction)[:6]
-        text = f"{head}.{fraction}" if fraction else head
+    texto = texto.replace("T", " ")
+    if "." in texto:
+        cabecera, fraccion = texto.split(".", 1)
+        fraccion = re.sub(r"\D", "", fraccion)[:6]
+        texto = f"{cabecera}.{fraccion}" if fraccion else cabecera
 
-    formats = (
+    formatos = (
         "%Y-%m-%d %H:%M:%S.%f",
         "%Y-%m-%d %H:%M:%S",
         "%Y-%m-%d",
     )
-    for fmt in formats:
+    for formato in formatos:
         try:
-            parsed = datetime.strptime(text, fmt)
-            return parsed
+            parseado = datetime.strptime(texto, formato)
+            return parseado
         except ValueError:
             continue
-    raise ValueError(f"Formato de fecha no soportado: {value}")
+    raise ValueError(f"Formato de fecha no soportado: {valor}")
 
 
-def parsear_fecha(value: Any) -> date:
-    return parsear_timestamp(value).date()
+def parsear_fecha(valor: Any) -> date:
+    return parsear_timestamp(valor).date()
 
 
-def obtener_cadena_conexion_desde_tnsnames(tnsnames_path: str, dsn_name: str) -> str | None:
-    if not os.path.exists(tnsnames_path):
-        logger.warning("No se encontro tnsnames.ora en: %s", tnsnames_path)
+def obtener_cadena_conexion_desde_tnsnames(ruta_tnsnames: str, nombre_dsn: str) -> str | None:
+    if not os.path.exists(ruta_tnsnames):
+        logger.warning("No se encontro tnsnames.ora en: %s", ruta_tnsnames)
         return None
 
     try:
-        with open(tnsnames_path, "r", encoding="utf-8") as file:
-            content = file.read()
+        with open(ruta_tnsnames, "r", encoding="utf-8") as archivo:
+            contenido = archivo.read()
 
-        lines = []
-        for line in content.splitlines():
-            stripped = line.strip()
-            if stripped and not stripped.startswith("#"):
-                lines.append(line)
-        clean_content = "\n".join(lines)
+        lineas = []
+        for linea in contenido.splitlines():
+            limpia = linea.strip()
+            if limpia and not limpia.startswith("#"):
+                lineas.append(linea)
+        contenido_limpio = "\n".join(lineas)
 
-        pattern = re.compile(
-            r"^\s*" + re.escape(dsn_name) + r"\s*=\s*\(",
+        patron = re.compile(
+            r"^\s*" + re.escape(nombre_dsn) + r"\s*=\s*\(",
             re.IGNORECASE | re.MULTILINE,
         )
-        match = pattern.search(clean_content)
-        if not match:
+        coincidencia = patron.search(contenido_limpio)
+        if not coincidencia:
             return None
 
-        start_pos = match.end() - 1
-        paren_count = 0
-        end_pos = start_pos
-        for index in range(start_pos, len(clean_content)):
-            char = clean_content[index]
-            if char == "(":
-                paren_count += 1
-            elif char == ")":
-                paren_count -= 1
-                if paren_count == 0:
-                    end_pos = index + 1
+        pos_inicio = coincidencia.end() - 1
+        contador_parentesis = 0
+        pos_fin = pos_inicio
+        for indice in range(pos_inicio, len(contenido_limpio)):
+            caracter = contenido_limpio[indice]
+            if caracter == "(":
+                contador_parentesis += 1
+            elif caracter == ")":
+                contador_parentesis -= 1
+                if contador_parentesis == 0:
+                    pos_fin = indice + 1
                     break
 
-        connection_string = clean_content[start_pos:end_pos].strip()
-        return " ".join(connection_string.split())
+        cadena_conexion = contenido_limpio[pos_inicio:pos_fin].strip()
+        return " ".join(cadena_conexion.split())
     except Exception as exc:
         logger.error("Error al parsear tnsnames.ora: %s", exc)
         return None
 
 
 def obtener_conexion_oracle() -> oracledb.Connection:
-    tns_path = os.path.join(WALLET_LOCATION, "tnsnames.ora")
-    connection_string = obtener_cadena_conexion_desde_tnsnames(tns_path, DB_DSN)
+    ruta_tns = os.path.join(WALLET_LOCATION, "tnsnames.ora")
+    cadena_conexion = obtener_cadena_conexion_desde_tnsnames(ruta_tns, DB_DSN)
 
-    if connection_string:
+    if cadena_conexion:
         logger.info("DSN '%s' resuelto desde tnsnames.ora.", DB_DSN)
         return oracledb.connect(
             user=DB_USER,
             password=DB_PASSWORD,
-            dsn=connection_string,
+            dsn=cadena_conexion,
             wallet_location=WALLET_LOCATION,
             wallet_password=WALLET_PASSWORD,
         )
@@ -217,97 +217,97 @@ def obtener_conexion_oracle() -> oracledb.Connection:
     )
 
 
-def leer_productos_csv(csv_path: Path) -> list[dict[str, Any]]:
-    if not csv_path.exists():
-        raise FileNotFoundError(f"No se encontro el archivo: {csv_path}")
+def leer_productos_csv(ruta_csv: Path) -> list[dict[str, Any]]:
+    if not ruta_csv.exists():
+        raise FileNotFoundError(f"No se encontro el archivo: {ruta_csv}")
 
     registros: list[dict[str, Any]] = []
-    with csv_path.open("r", encoding="utf-8-sig", newline="") as file:
-        reader = csv.DictReader(file)
-        required_columns = {"ID_PRODUCTO", "NOMBRE", "CATEGORIA", "PRECIO_ACTUAL", "FECHA_ACTUALIZACION"}
-        missing = required_columns - set(reader.fieldnames or [])
-        if missing:
-            raise ValueError(f"Faltan columnas en {csv_path.name}: {', '.join(sorted(missing))}")
+    with ruta_csv.open("r", encoding="utf-8-sig", newline="") as archivo:
+        lector = csv.DictReader(archivo)
+        columnas_requeridas = {"ID_PRODUCTO", "NOMBRE", "CATEGORIA", "PRECIO_ACTUAL", "FECHA_ACTUALIZACION"}
+        faltantes = columnas_requeridas - set(lector.fieldnames or [])
+        if faltantes:
+            raise ValueError(f"Faltan columnas en {ruta_csv.name}: {', '.join(sorted(faltantes))}")
 
-        for row in reader:
+        for fila in lector:
             registros.append(
                 {
-                    "id_producto": normalizar_texto(row["ID_PRODUCTO"]),
-                    "nombre": normalizar_texto(row["NOMBRE"]),
-                    "categoria": normalizar_texto(row["CATEGORIA"]),
-                    "precio_actual": parsear_numero(row["PRECIO_ACTUAL"]),
-                    "fecha_actualizacion": parsear_timestamp(row["FECHA_ACTUALIZACION"]),
+                    "id_producto": normalizar_texto(fila["ID_PRODUCTO"]),
+                    "nombre": normalizar_texto(fila["NOMBRE"]),
+                    "categoria": normalizar_texto(fila["CATEGORIA"]),
+                    "precio_actual": parsear_numero(fila["PRECIO_ACTUAL"]),
+                    "fecha_actualizacion": parsear_timestamp(fila["FECHA_ACTUALIZACION"]),
                 }
             )
 
     return registros
 
 
-def leer_historial_csv(csv_path: Path) -> list[dict[str, Any]]:
-    if not csv_path.exists():
-        raise FileNotFoundError(f"No se encontro el archivo: {csv_path}")
+def leer_historial_csv(ruta_csv: Path) -> list[dict[str, Any]]:
+    if not ruta_csv.exists():
+        raise FileNotFoundError(f"No se encontro el archivo: {ruta_csv}")
 
     registros: list[dict[str, Any]] = []
-    with csv_path.open("r", encoding="utf-8-sig", newline="") as file:
-        reader = csv.DictReader(file)
-        required_columns = {"ID_PRODUCTO", "FECHA", "PRECIO_REGISTRADO"}
-        missing = required_columns - set(reader.fieldnames or [])
-        if missing:
-            raise ValueError(f"Faltan columnas en {csv_path.name}: {', '.join(sorted(missing))}")
+    with ruta_csv.open("r", encoding="utf-8-sig", newline="") as archivo:
+        lector = csv.DictReader(archivo)
+        columnas_requeridas = {"ID_PRODUCTO", "FECHA", "PRECIO_REGISTRADO"}
+        faltantes = columnas_requeridas - set(lector.fieldnames or [])
+        if faltantes:
+            raise ValueError(f"Faltan columnas en {ruta_csv.name}: {', '.join(sorted(faltantes))}")
 
-        for row in reader:
+        for fila in lector:
             registros.append(
                 {
-                    "id_producto": normalizar_texto(row["ID_PRODUCTO"]),
-                    "fecha": parsear_fecha(row["FECHA"]),
-                    "precio_registrado": parsear_numero(row["PRECIO_REGISTRADO"]),
+                    "id_producto": normalizar_texto(fila["ID_PRODUCTO"]),
+                    "fecha": parsear_fecha(fila["FECHA"]),
+                    "precio_registrado": parsear_numero(fila["PRECIO_REGISTRADO"]),
                 }
             )
 
     return registros
 
 
-def ejecutar_lotes(cursor: oracledb.Cursor, sql: str, data: list[dict[str, Any]], label: str, batch_size: int) -> None:
-    if not data:
-        logger.info("No hay registros para insertar en %s.", label)
+def ejecutar_lotes(cursor: oracledb.Cursor, sql: str, datos: list[dict[str, Any]], etiqueta: str, tamano_lote: int) -> None:
+    if not datos:
+        logger.info("No hay registros para insertar en %s.", etiqueta)
         return
 
-    total = len(data)
-    logger.info("Insertando %s registros en %s...", total, label)
+    total = len(datos)
+    logger.info("Insertando %s registros en %s...", total, etiqueta)
 
-    for index in range(0, total, batch_size):
-        batch = data[index:index + batch_size]
-        cursor.executemany(sql, batch)
-        logger.info("%s: lote %s de %s completado (%s registros).", label, index // batch_size + 1, (total + batch_size - 1) // batch_size, len(batch))
+    for indice in range(0, total, tamano_lote):
+        lote = datos[indice:indice + tamano_lote]
+        cursor.executemany(sql, lote)
+        logger.info("%s: lote %s de %s completado (%s registros).", etiqueta, indice // tamano_lote + 1, (total + tamano_lote - 1) // tamano_lote, len(lote))
 
 
-def cargar_csvs(productos_csv: Path, historial_csv: Path, batch_size: int) -> None:
+def cargar_csvs(productos_csv: Path, historial_csv: Path, tamano_lote: int) -> None:
     productos = leer_productos_csv(productos_csv)
     historial = leer_historial_csv(historial_csv)
 
     logger.info("Archivo de productos: %s (%s filas)", productos_csv, len(productos))
     logger.info("Archivo de historial: %s (%s filas)", historial_csv, len(historial))
 
-    connection = None
+    conexion = None
     try:
-        connection = obtener_conexion_oracle()
-        connection.autocommit = False
-        cursor = connection.cursor()
+        conexion = obtener_conexion_oracle()
+        conexion.autocommit = False
+        cursor = conexion.cursor()
 
-        ejecutar_lotes(cursor, SQL_MERGE_PRODUCTOS, productos, "PRODUCTOS", batch_size)
-        ejecutar_lotes(cursor, SQL_MERGE_HISTORIAL, historial, "HISTORIAL_PRECIOS", batch_size)
+        ejecutar_lotes(cursor, SQL_MERGE_PRODUCTOS, productos, "PRODUCTOS", tamano_lote)
+        ejecutar_lotes(cursor, SQL_MERGE_HISTORIAL, historial, "HISTORIAL_PRECIOS", tamano_lote)
 
-        connection.commit()
+        conexion.commit()
         logger.info("Carga finalizada con exito.")
     except Exception as exc:
         logger.error("Falló la carga: %s", exc)
-        if connection:
-            connection.rollback()
+        if conexion:
+            conexion.rollback()
             logger.info("Rollback ejecutado.")
         raise
     finally:
-        if connection:
-            connection.close()
+        if conexion:
+            conexion.close()
 
 
 def construir_parser() -> argparse.ArgumentParser:
@@ -325,7 +325,8 @@ def construir_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--batch-size",
         type=int,
-        default=DEFAULT_BATCH_SIZE,
+        default=DEFAULT_TAMANO_LOTE,
+        dest="tamano_lote",
         help="Tamaño del lote para executemany",
     )
     return parser
@@ -338,7 +339,7 @@ def main() -> None:
     cargar_csvs(
         Path(args.productos),
         Path(args.historial),
-        args.batch_size,
+        args.tamano_lote,
     )
 
 

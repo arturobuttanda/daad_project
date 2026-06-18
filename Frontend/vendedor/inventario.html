@@ -1,0 +1,420 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Inventario - NexusMarket</title>
+  <link rel="stylesheet" href="../css/estilo.css" />
+</head>
+<body>
+  <div class="contenedor-layout">
+    <!-- SIDEBAR -->
+    <aside class="sidebar" id="sidebar">
+      <div style="padding:0 1.25rem 1rem; border-bottom:1px solid var(--borde-suave); margin-bottom:0.5rem;">
+        <div class="logo" style="font-size:1rem;">Nexus<span>Market</span></div>
+      </div>
+      <ul class="sidebar-nav">
+        <li><a href="inventario.html" class="activo">
+          <svg class="icono" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/></svg>
+          <span class="texto-nav">Inventario</span>
+        </a></li>
+        <li><a href="reporte.html">
+          <svg class="icono" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 20V10"/><path d="M12 20V4"/><path d="M6 20v-6"/></svg>
+          <span class="texto-nav">Finanzas</span>
+        </a></li>
+      </ul>
+      <div style="padding:1rem 1.25rem; margin-top:auto;">
+        <button class="btn btn-primario btn-sm btn-block" onclick="abrirModalNuevo()">+ Agregar producto</button>
+        <button class="btn btn-sm btn-block mt-1" style="border:1px solid var(--error); color:var(--error);" onclick="cerrarSesionNav()">Cerrar sesion</button>
+      </div>
+    </aside>
+
+    <!-- CONTENIDO -->
+    <main class="contenido-principal">
+      <!-- HEADER -->
+      <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:1.5rem; flex-wrap:wrap; gap:0.75rem;">
+        <div>
+          <small style="color:var(--texto-suave); text-transform:uppercase; font-weight:600; letter-spacing:0.05em;">Bienvenido</small>
+          <h1 id="tituloBienvenida" style="font-size:1.5rem; font-weight:700; color:var(--texto);">Panel de inventario</h1>
+        </div>
+        <button class="btn btn-primario" onclick="abrirModalNuevo()">+ Nuevo producto</button>
+      </div>
+
+      <!-- ESTADISTICAS -->
+      <div class="grid-estadisticas" id="estadisticas"></div>
+
+      <!-- GRAFICAS -->
+      <div style="display:grid; grid-template-columns:1fr 1fr; gap:1rem; margin-bottom:1.5rem;" id="graficasPanel">
+        <div id="graficoCategorias"></div>
+        <div id="graficoStock"></div>
+      </div>
+
+      <!-- TABLA DE PRODUCTOS -->
+      <div class="tabla-contenedor">
+        <table class="tabla">
+          <thead>
+            <tr>
+              <th>ID</th>
+              <th>Nombre</th>
+              <th>Marca</th>
+              <th>Categoria</th>
+              <th>Precio</th>
+              <th>Stock</th>
+              <th>Costo</th>
+              <th>Vencimiento</th>
+              <th>Actualizacion</th>
+              <th>Acciones</th>
+            </tr>
+          </thead>
+          <tbody id="tablaProductos">
+            <tr><td colspan="10" style="text-align:center; color:var(--texto-suave);">Cargando productos...</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <!-- PAGINACION -->
+      <div class="paginacion" id="paginacion"></div>
+    </main>
+  </div>
+
+  <!-- MODAL PRODUCTO -->
+  <div class="modal-overlay" id="modalProducto" style="display:none;">
+    <div class="modal-contenido">
+      <div class="modal-cabecera">
+        <h2 id="tituloModal">Nuevo producto</h2>
+        <button class="btn btn-sm" onclick="cerrarModal()" style="background:none; border:1px solid var(--borde);">✕</button>
+      </div>
+      <div class="modal-cuerpo">
+        <form id="formularioProducto">
+          <div class="grupo-campo">
+            <label for="idProducto">ID del producto</label>
+            <input type="text" id="idProducto" class="campo" placeholder="Ej: PROD-001" required />
+          </div>
+          <div class="grupo-campo">
+            <label for="nombreProducto">Nombre</label>
+            <input type="text" id="nombreProducto" class="campo" placeholder="Nombre del producto" required />
+          </div>
+          <div class="grupo-campo">
+            <label for="marcaProducto">Marca</label>
+            <input type="text" id="marcaProducto" class="campo" placeholder="Marca" />
+          </div>
+          <div class="grupo-campo">
+            <label for="categoriaProducto">Categoria</label>
+            <input type="text" id="categoriaProducto" class="campo" placeholder="Categoria" />
+          </div>
+          <div style="display:grid; grid-template-columns:1fr 1fr; gap:1rem;">
+            <div class="grupo-campo">
+              <label for="precioProducto">Precio</label>
+              <input type="number" id="precioProducto" class="campo" placeholder="0.00" step="0.01" min="0" />
+            </div>
+            <div class="grupo-campo">
+              <label for="stockProducto">Stock</label>
+              <input type="number" id="stockProducto" class="campo" placeholder="0" min="0" />
+            </div>
+            <div class="grupo-campo">
+              <label for="costoProducto">Costo fabricacion</label>
+              <input type="number" id="costoProducto" class="campo" placeholder="0.00" step="0.01" min="0" />
+            </div>
+            <div class="grupo-campo">
+              <label for="vencimientoProducto">Fecha vencimiento</label>
+              <input type="date" id="vencimientoProducto" class="campo" />
+            </div>
+          </div>
+
+          <!-- RECOMENDACION DE PRECIO -->
+          <div id="recomendacionPrecio" style="display:none; background:var(--borde-suave); border-radius:0.75rem; padding:0.75rem 1rem; margin-top:0.5rem;">
+            <small style="font-weight:600; color:var(--cafe-claro);">Recomendacion de precio:</small>
+            <div id="contenidoRecomendacion"></div>
+          </div>
+        </form>
+      </div>
+      <div class="modal-pie">
+        <button class="btn btn-secundario" onclick="cerrarModal()">Cancelar</button>
+        <button class="btn btn-primario" onclick="guardarProducto()" id="btnGuardarProducto">Guardar</button>
+      </div>
+    </div>
+  </div>
+
+  <script src="../js/utilerias.js"></script>
+  <script src="../js/api.js"></script>
+  <script src="../js/graficos.js"></script>
+  <script>
+    // === ESTADO GLOBAL ===
+    const TAMANO_PAGINA = 20;
+    let paginaActual = 1;
+    let totalPaginas = 1;
+    let productos = [];
+    let editandoId = null;
+    let recomendacionTimer = null;
+
+    const usuario = obtenerUsuario();
+    if (!usuario.registrado || usuario.tipo !== "Vendedor") {
+      window.location.href = "../iniciar-sesion.html";
+    }
+
+    document.getElementById("tituloBienvenida").textContent =
+      "Panel de " + usuario.nombre;
+
+    // === CARGAR PRODUCTOS ===
+    async function cargarProductos(pagina = 1) {
+      paginaActual = pagina;
+      try {
+        const datos = await Api.listarProductosVendedor(usuario.id, pagina, TAMANO_PAGINA);
+        productos = datos.items || [];
+        totalPaginas = datos.total_pages || 1;
+        paginaActual = datos.page || 1;
+        renderizarProductos();
+        renderizarPaginacion();
+        renderizarEstadisticas();
+        renderizarGraficas();
+      } catch (error) {
+        document.getElementById("tablaProductos").innerHTML =
+          `<tr><td colspan="10" style="text-align:center; color:var(--error);">Error: ${error.message}</td></tr>`;
+      }
+    }
+
+    function renderizarProductos() {
+      const tbody = document.getElementById("tablaProductos");
+      if (productos.length === 0) {
+        tbody.innerHTML = `<tr><td colspan="10" style="text-align:center; color:var(--texto-suave);">No hay productos.</td></tr>`;
+        return;
+      }
+
+      tbody.innerHTML = productos.map((p) => `
+        <tr>
+          <td style="font-family:monospace; font-size:0.75rem;">${p.id_producto || "---"}</td>
+          <td><span class="texto-truncado-xl" title="${p.nombre || ""}">${truncarTexto(p.nombre, 30)}</span></td>
+          <td><span class="texto-truncado" title="${p.marca || ""}" style="max-width:100px;">${truncarTexto(p.marca, 12)}</span></td>
+          <td>${p.categoria || "---"}</td>
+          <td style="font-weight:600; color:var(--ambar);">${formatearDinero(p.precio_actual)}</td>
+          <td><span class="${(p.stock || 0) <= 10 ? "etiqueta etiqueta-roja" : "etiqueta etiqueta-verde"}">${p.stock || 0}</span></td>
+          <td>${formatearDinero(p.precio_fabricacion)}</td>
+          <td style="font-size:0.75rem;">${formatearFecha(p.fecha_caducidad)}</td>
+          <td style="font-size:0.75rem;">${formatearFecha(p.fecha_actualizacion)}</td>
+          <td>
+            <div style="display:flex; gap:0.375rem;">
+              <button class="btn btn-sm" style="background:var(--borde-suave);" onclick="editarProducto('${p.id_producto}')">Editar</button>
+              <button class="btn btn-sm btn-peligro" onclick="eliminarProducto('${p.id_producto}')">Eliminar</button>
+            </div>
+          </td>
+        </tr>
+      `).join("");
+    }
+
+    function renderizarPaginacion() {
+      const div = document.getElementById("paginacion");
+      if (totalPaginas <= 1) { div.innerHTML = ""; return; }
+
+      let html = "";
+      html += `<button ${paginaActual <= 1 ? "disabled" : ""} onclick="cargarProductos(1)">Primera</button>`;
+      html += `<button ${paginaActual <= 1 ? "disabled" : ""} onclick="cargarProductos(${paginaActual - 1})">Anterior</button>`;
+
+      for (let i = Math.max(1, paginaActual - 2); i <= Math.min(totalPaginas, paginaActual + 2); i++) {
+        html += `<button class="${i === paginaActual ? "activa" : ""}" onclick="cargarProductos(${i})">${i}</button>`;
+      }
+
+      html += `<button ${paginaActual >= totalPaginas ? "disabled" : ""} onclick="cargarProductos(${paginaActual + 1})">Siguiente</button>`;
+      html += `<button ${paginaActual >= totalPaginas ? "disabled" : ""} onclick="cargarProductos(${totalPaginas})">Ultima</button>`;
+      html += `<span>Pagina ${paginaActual} de ${totalPaginas}</span>`;
+
+      div.innerHTML = html;
+    }
+
+    function renderizarEstadisticas() {
+      const total = productos.length;
+      const stockBajo = productos.filter((p) => (p.stock || 0) <= 10).length;
+      const conCosto = productos.filter((p) => p.precio_fabricacion != null).length;
+      const conVencimiento = productos.filter((p) => p.fecha_caducidad).length;
+
+      document.getElementById("estadisticas").innerHTML = `
+        <div class="tarjeta-estadistica"><div class="valor">${total}</div><div class="etiqueta-est">Productos</div></div>
+        <div class="tarjeta-estadistica"><div class="valor" style="color:${stockBajo > 0 ? "var(--error)" : "var(--exito)"};">${stockBajo}</div><div class="etiqueta-est">Stock bajo</div></div>
+        <div class="tarjeta-estadistica"><div class="valor">${conCosto}</div><div class="etiqueta-est">Con costo</div></div>
+        <div class="tarjeta-estadistica"><div class="valor">${conVencimiento}</div><div class="etiqueta-est">Con vencimiento</div></div>
+      `;
+    }
+
+    function renderizarGraficas() {
+      // Categorias
+      const cats = {};
+      productos.forEach((p) => {
+        const c = p.categoria || "Sin categoria";
+        cats[c] = (cats[c] || 0) + 1;
+      });
+      const datosCats = Object.entries(cats).map(([k, v]) => ({ etiqueta: k, valor: v }));
+      Graficos.barras("graficoCategorias", datosCats.slice(0, 10), "Productos por categoria");
+
+      // Rangos de stock
+      const rangos = { "0-4": 0, "5-9": 0, "10-19": 0, "20+": 0 };
+      productos.forEach((p) => {
+        const s = p.stock || 0;
+        if (s <= 4) rangos["0-4"]++;
+        else if (s <= 9) rangos["5-9"]++;
+        else if (s <= 19) rangos["10-19"]++;
+        else rangos["20+"]++;
+      });
+      const datosStock = Object.entries(rangos).map(([k, v]) => ({ etiqueta: k, valor: v }));
+      Graficos.barras("graficoStock", datosStock, "Distribucion de stock");
+    }
+
+    // === MODAL ===
+    function abrirModalNuevo() {
+      editandoId = null;
+      document.getElementById("tituloModal").textContent = "Nuevo producto";
+      document.getElementById("btnGuardarProducto").textContent = "Guardar";
+      document.getElementById("formularioProducto").reset();
+      document.getElementById("recomendacionPrecio").style.display = "none";
+      document.getElementById("modalProducto").style.display = "flex";
+    }
+
+    function cerrarModal() {
+      document.getElementById("modalProducto").style.display = "none";
+    }
+
+    async function editarProducto(id) {
+      editandoId = id;
+      const producto = productos.find((p) => p.id_producto === id);
+      if (!producto) return;
+
+      document.getElementById("tituloModal").textContent = "Editar producto";
+      document.getElementById("btnGuardarProducto").textContent = "Actualizar";
+      document.getElementById("idProducto").value = producto.id_producto || "";
+      document.getElementById("nombreProducto").value = producto.nombre || "";
+      document.getElementById("marcaProducto").value = producto.marca || "";
+      document.getElementById("categoriaProducto").value = producto.categoria || "";
+      document.getElementById("precioProducto").value = producto.precio_actual || "";
+      document.getElementById("stockProducto").value = producto.stock || 0;
+      document.getElementById("costoProducto").value = producto.precio_fabricacion || "";
+      document.getElementById("vencimientoProducto").value = producto.fecha_caducidad || "";
+      document.getElementById("modalProducto").style.display = "flex";
+    }
+
+    async function guardarProducto() {
+      const datos = {
+        id_producto: document.getElementById("idProducto").value.trim().toUpperCase(),
+        nombre: document.getElementById("nombreProducto").value.trim(),
+        marca: document.getElementById("marcaProducto").value.trim() || null,
+        categoria: document.getElementById("categoriaProducto").value.trim() || null,
+        precio_actual: parseFloat(document.getElementById("precioProducto").value) || null,
+        stock: parseInt(document.getElementById("stockProducto").value) || 0,
+        precio_fabricacion: parseFloat(document.getElementById("costoProducto").value) || null,
+        fecha_caducidad: document.getElementById("vencimientoProducto").value || null,
+      };
+
+      if (!datos.id_producto || !datos.nombre) {
+        mostrarNotificacion("ID y nombre son obligatorios.", "error");
+        return;
+      }
+
+      try {
+        if (editandoId) {
+          await Api.actualizarProducto(editandoId, datos);
+          mostrarNotificacion("Producto actualizado.", "exito");
+        } else {
+          datos.id_vendedor = usuario.id;
+          await Api.crearProducto(datos);
+          mostrarNotificacion("Producto creado.", "exito");
+        }
+        cerrarModal();
+        cargarProductos(paginaActual);
+      } catch (error) {
+        mostrarNotificacion(error.message, "error");
+      }
+    }
+
+    async function eliminarProducto(id) {
+      if (!confirm("¿Eliminar este producto?")) return;
+      try {
+        await Api.eliminarProducto(id);
+        mostrarNotificacion("Producto eliminado.", "exito");
+        cargarProductos(paginaActual);
+      } catch (error) {
+        mostrarNotificacion(error.message, "error");
+      }
+    }
+
+    // === RECOMENDACION DE PRECIO (automatica) ===
+    document.querySelectorAll("#nombreProducto, #marcaProducto, #categoriaProducto").forEach((el) => {
+      el.addEventListener("input", function () {
+        clearTimeout(recomendacionTimer);
+        recomendacionTimer = setTimeout(() => {
+          const nombre = document.getElementById("nombreProducto").value.trim();
+          if (nombre.length < 3) {
+            document.getElementById("recomendacionPrecio").style.display = "none";
+            return;
+          }
+          Api.recomendarPrecio(
+            document.getElementById("marcaProducto").value.trim() || null,
+            document.getElementById("categoriaProducto").value.trim() || null,
+            nombre
+          ).then((data) => {
+            if (data.precio_sugerido) {
+              document.getElementById("recomendacionPrecio").style.display = "block";
+              
+              let similaresHtml = "";
+              if (data.similares && data.similares.length > 0) {
+                similaresHtml = `
+                  <div style="margin-top:0.75rem; border-top:1px solid var(--borde-suave); padding-top:0.5rem;">
+                    <div style="font-weight:600; color:var(--texto); margin-bottom:0.35rem; font-size:0.8rem;">Productos similares detectados:</div>
+                    <div style="max-height:150px; overflow-y:auto; padding-right:0.25rem;">
+                      <table style="width:100%; border-collapse:collapse; text-align:left; font-size:0.75rem;">
+                        <thead>
+                          <tr style="border-bottom:1px solid var(--borde-suave); color:var(--texto-suave);">
+                            <th style="padding-bottom:0.25rem;">Nombre</th>
+                            <th style="text-align:right; padding-bottom:0.25rem; width:80px;">Precio</th>
+                            <th style="text-align:right; padding-bottom:0.25rem; width:70px;">Similitud</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          ${data.similares.map(p => `
+                            <tr style="border-bottom:1px dashed var(--borde-suave);">
+                              <td title="${p.nombre}" style="padding:0.35rem 0; max-width:150px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; color:var(--texto);">${p.nombre}</td>
+                              <td style="padding:0.35rem 0; text-align:right; font-weight:600; color:var(--ambar);">${formatearDinero(p.precio_actual)}</td>
+                              <td style="padding:0.35rem 0; text-align:right; color:var(--texto-suave); font-weight:500;">${(p.similitud * 100).toFixed(1)}%</td>
+                            </tr>
+                          `).join("")}
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+                `;
+              }
+
+              document.getElementById("contenidoRecomendacion").innerHTML = `
+                <div style="display:flex; justify-content:space-between; align-items:center;">
+                  <div>
+                    <strong style="font-size:1.25rem; color:var(--ambar); display:block;">${formatearDinero(data.precio_sugerido)}</strong>
+                    <small style="color:var(--texto-suave);">
+                      Rango: ${formatearDinero(data.precio_min)} - ${formatearDinero(data.precio_max)}
+                    </small>
+                  </div>
+                  <span style="font-size:0.75rem; background:var(--borde); padding:0.25rem 0.5rem; border-radius:0.25rem; color:var(--texto); font-weight:500;">
+                    ${data.similares ? data.similares.length : 0} similares
+                  </span>
+                </div>
+                ${similaresHtml}
+              `;
+            } else {
+              document.getElementById("recomendacionPrecio").style.display = "none";
+            }
+          }).catch(() => {
+            document.getElementById("recomendacionPrecio").style.display = "none";
+          });
+        }, 600);
+      });
+    });
+
+    function cerrarSesionNav() {
+      cerrarSesion();
+    }
+
+    // Cerrar modal al hacer clic fuera
+    document.getElementById("modalProducto").addEventListener("click", function (e) {
+      if (e.target === this) cerrarModal();
+    });
+
+    // Inicializar
+    cargarProductos();
+  </script>
+</body>
+</html>

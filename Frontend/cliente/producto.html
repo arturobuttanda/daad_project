@@ -1,0 +1,429 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Detalle del producto - NexusMarket</title>
+  <link rel="stylesheet" href="../css/estilo.css" />
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+</head>
+<body>
+  <div class="contenedor-layout">
+    <aside class="sidebar" id="sidebar">
+      <div style="padding:0 1.25rem 1rem; border-bottom:1px solid var(--borde-suave); margin-bottom:0.5rem;">
+        <div class="logo" style="font-size:1rem;">Nexus<span>Market</span></div>
+      </div>
+      <ul class="sidebar-nav">
+        <li><a href="marketplace.html" class="activo">
+          <svg class="icono" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="9" cy="21" r="1"/><circle cx="20" cy="21" r="1"/><path d="M1 1h4l2.68 13.39a2 2 0 0 0 2 1.61h9.72a2 2 0 0 0 2-1.61L23 6H6"/></svg>
+          <span class="texto-nav">Marketplace</span>
+        </a></li>
+        <li><a href="historial.html">
+          <svg class="icono" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg>
+          <span class="texto-nav">Pedidos</span>
+        </a></li>
+      </ul>
+      <div style="padding:1rem 1.25rem; margin-top:auto;">
+        <button class="btn btn-sm btn-block" style="border:1px solid var(--error); color:var(--error);" onclick="cerrarSesionNav()">Cerrar sesion</button>
+      </div>
+    </aside>
+
+    <main class="contenido-principal">
+      <a href="marketplace.html" class="btn btn-secundario btn-sm" style="margin-bottom:1.5rem;">← Volver al marketplace</a>
+
+      <div id="contenidoDetalle">
+        <p style="color:var(--texto-suave);">Cargando detalle del producto...</p>
+      </div>
+
+      <!-- TICKET DE COMPRA -->
+      <div id="ticketCompra" style="display:none; margin-top:1.5rem; max-width: 500px;"></div>
+    </main>
+  </div>
+
+  <script src="../js/utilerias.js"></script>
+  <script src="../js/api.js"></script>
+  <script src="../js/carrito.js"></script>
+  <script>
+    const params = new URLSearchParams(window.location.search);
+    const idProducto = params.get("id");
+    let detalle = null;
+    let cantidadCompra = 1;
+    let miGrafica = null;
+    let historialProcesadoGlobal = [];
+
+    const usuario = obtenerUsuario();
+    if (!usuario.registrado || usuario.tipo !== "Cliente") {
+      window.location.href = "../iniciar-sesion.html";
+    }
+
+    async function cargarDetalle() {
+      if (!idProducto) {
+        document.getElementById("contenidoDetalle").innerHTML =
+          '<p style="color:var(--error); text-align:center;">ID de producto no especificado.</p>';
+        return;
+      }
+
+      try {
+        detalle = await Api.obtenerDetalleProducto(idProducto);
+        renderizarVista(detalle);
+      } catch (error) {
+        document.getElementById("contenidoDetalle").innerHTML =
+          `<p style="color:var(--error); text-align:center; padding: 2rem;">Error al cargar detalles: ${error.message}</p>`;
+      }
+    }
+
+    function calcularPromediosMensualesHistoricos(historialProcesado) {
+      const grupos = {};
+      historialProcesado.forEach(h => {
+        const anio = h.fecha.getFullYear();
+        const mes = h.fecha.getMonth();
+        const key = `${anio}-${mes}`;
+        if (!grupos[key]) {
+          grupos[key] = {
+            precios: [],
+            nombreMes: h.fecha.toLocaleString('es-MX', { month: 'long' }),
+            anio: anio,
+            orden: anio * 12 + mes
+          };
+        }
+        grupos[key].precios.push(h.precio);
+      });
+
+      const promediosMensuales = Object.keys(grupos).map(key => {
+        const g = grupos[key];
+        const avg = g.precios.reduce((a, b) => a + b, 0) / g.precios.length;
+        return {
+          mesLabel: `${g.nombreMes.charAt(0).toUpperCase() + g.nombreMes.slice(1)} ${g.anio}`,
+          promedio: avg,
+          orden: g.orden
+        };
+      });
+
+      promediosMensuales.sort((a, b) => b.orden - a.orden);
+      return promediosMensuales;
+    }
+
+    function renderizarVista(datos) {
+      const prod = datos.product || {};
+      const historial = datos.price_history || [];
+
+      // Procesar y ordenar el historial por fecha de forma ascendente
+      historialProcesadoGlobal = historial.map(h => ({
+        fecha: new Date(h.fecha),
+        precio: parseFloat(h.precio)
+      })).sort((a, b) => a.fecha - b.fecha);
+
+      // Calcular promedios
+      const ahora = new Date();
+      const hace30dias = new Date();
+      hace30dias.setDate(ahora.getDate() - 30);
+
+      const preciosTodo = historialProcesadoGlobal.map(h => h.precio);
+      const promedioTotal = preciosTodo.length > 0 ? (preciosTodo.reduce((a, b) => a + b, 0) / preciosTodo.length) : parseFloat(prod.precio_actual);
+
+      const historialMensual = historialProcesadoGlobal.filter(h => h.fecha >= hace30dias);
+      const preciosMensual = historialMensual.map(h => h.precio);
+      const promedioMensual = preciosMensual.length > 0 ? (preciosMensual.reduce((a, b) => a + b, 0) / preciosMensual.length) : promedioTotal;
+
+      // Determinamos usar el promedio mensual si hay datos recientes (es mas relevante para rotaciones de temporada), o si no, el historico total.
+      const usaPromedioMensual = preciosMensual.length > 0;
+      const promedioReferencia = usaPromedioMensual ? promedioMensual : promedioTotal;
+      const tipoPromedioLabel = usaPromedioMensual ? "Mensual" : "Histórico";
+
+      const precioActual = parseFloat(prod.precio_actual);
+      const diffPorcentaje = (precioActual - promedioReferencia) / promedioReferencia;
+
+      let recomendacionTexto = "";
+      let recomendacionColor = "";
+      let recomendacionSubtexto = "";
+
+      if (Math.abs(diffPorcentaje) <= 0.05) {
+        recomendacionTexto = "Recomendación: Compra Opcional";
+        recomendacionColor = "#d97706"; // var(--ambar)
+        recomendacionSubtexto = `Precio similar al promedio ${tipoPromedioLabel.toLowerCase()}`;
+      } else if (diffPorcentaje > 0.05) {
+        recomendacionTexto = "Recomendación: Esperar";
+        recomendacionColor = "#dc2626"; // var(--error)
+        recomendacionSubtexto = `Precio mayor al promedio ${tipoPromedioLabel.toLowerCase()}`;
+      } else {
+        recomendacionTexto = "Recomendación: Comprar";
+        recomendacionColor = "#16a34a"; // var(--exito)
+        recomendacionSubtexto = `Precio menor al promedio ${tipoPromedioLabel.toLowerCase()}`;
+      }
+
+      const promediosMensuales = calcularPromediosMensualesHistoricos(historialProcesadoGlobal);
+
+      document.getElementById("contenidoDetalle").innerHTML = `
+        <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: 1.5rem; align-items: start;">
+          <!-- COLUMNA IZQUIERDA: INFORMACION Y COMPRA -->
+          <div style="display: flex; flex-direction: column; gap: 1.25rem;">
+            <div class="tarjeta-simple" style="padding: 1.5rem;">
+              <span class="etiqueta" style="margin-bottom: 0.5rem;">${prod.categoria || "General"}</span>
+              <h1 style="font-size: 1.5rem; font-weight: 700; color: var(--texto); margin: 0.25rem 0;">${prod.nombre}</h1>
+              <p style="color: var(--texto-suave); font-size: 0.875rem; margin-bottom: 1rem;">Marca: ${prod.marca || "Sin marca"}</p>
+              
+              <div style="display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 0.75rem;">
+                <span style="font-size: 1.75rem; font-weight: 800; color: var(--ambar);">${formatearDinero(prod.precio_actual)}</span>
+                <span style="font-size: 0.8125rem; color: var(--texto-suave);">Stock: <strong>${prod.stock || 0}</strong></span>
+              </div>
+
+              ${datos.vendor ? `
+                <div style="background: var(--borde-suave); border-radius: 0.5rem; padding: 0.625rem; margin-bottom: 1rem; font-size: 0.8125rem;">
+                  <span style="color: var(--texto-suave);">Ofrecido por:</span> <strong style="color: var(--texto);">${datos.vendor.nombre}</strong>
+                </div>
+              ` : ""}
+
+              <!-- ACCIONES DE COMPRA -->
+              <div style="border-top: 1px solid var(--borde-suave); padding-top: 1rem;">
+                <label style="display: block; font-size: 0.75rem; font-weight: 600; color: var(--texto-suave); margin-bottom: 0.375rem;">Cantidad:</label>
+                <div style="display: flex; gap: 0.75rem; align-items: center; flex-wrap: wrap;">
+                  <div style="display: flex; align-items: center; gap: 0.25rem; border: 1px solid var(--borde); border-radius: 0.5rem; padding: 0.25rem;">
+                    <button class="btn btn-sm" onclick="cambiarCantidadCompra(-1)" style="background: none; border: none; padding: 0.25rem 0.5rem;">-</button>
+                    <span id="cantidadCompra" style="font-weight: 700; font-size: 0.9375rem; min-width: 25px; text-align: center;">1</span>
+                    <button class="btn btn-sm" onclick="cambiarCantidadCompra(1)" style="background: none; border: none; padding: 0.25rem 0.5rem;">+</button>
+                  </div>
+                  <button class="btn btn-primario" onclick="comprarAhora()" style="flex: 1;">Comprar ahora</button>
+                  <button class="btn btn-secundario" onclick="agregarCarrito()">+ Carrito</button>
+                </div>
+              </div>
+            </div>
+
+            <!-- ANALISIS DE PRECIO -->
+            <div class="tarjeta-simple" style="border-left: 6px solid ${recomendacionColor}; padding: 1.25rem;">
+              <small style="text-transform: uppercase; font-weight: 700; color: var(--texto-suave); font-size: 0.6875rem;">Análisis de Conveniencia</small>
+              <h4 style="font-size: 1.125rem; font-weight: 700; color: ${recomendacionColor}; margin: 0.25rem 0;">${recomendacionTexto}</h4>
+              <p style="font-size: 0.8125rem; color: var(--texto-suave); line-height: 1.4; margin-top: 0.25rem;">${recomendacionSubtexto}</p>
+              
+              <div style="margin-top: 0.75rem; display: flex; gap: 1rem; border-top: 1px dashed var(--borde-suave); padding-top: 0.75rem; font-size: 0.75rem; color: var(--texto-suave);">
+                <div>Promedio Mensual: <strong>${formatearDinero(promedioMensual)}</strong></div>
+                <div>Promedio Total: <strong>${formatearDinero(promedioTotal)}</strong></div>
+              </div>
+            </div>
+          </div>
+
+          <!-- COLUMNA DERECHA: GRAFICA E HISTORIAL -->
+          <div class="tarjeta-simple" style="padding: 1.5rem; display: flex; flex-direction: column; gap: 1rem;">
+            <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 0.5rem;">
+              <h3 style="font-size: 1rem; font-weight: 700; color: var(--texto);">Evolución de Precio</h3>
+              <div style="display: flex; gap: 0.25rem; border: 1px solid var(--borde); border-radius: 0.5rem; overflow: hidden; padding: 2px; background: white;">
+                <button id="btnMensual" class="btn btn-sm btn-primario" onclick="cambiarFiltroGrafica('mensual')" style="padding: 0.25rem 0.625rem; border-radius: 0.375rem; font-size: 0.75rem;">Mensual</button>
+                <button id="btnTodo" class="btn btn-sm btn-secundario" onclick="cambiarFiltroGrafica('todo')" style="padding: 0.25rem 0.625rem; border-radius: 0.375rem; font-size: 0.75rem; border: none;">Todo</button>
+              </div>
+            </div>
+
+            <!-- CONTENEDOR DE LA GRAFICA (Estilo Keepa) -->
+            <div style="position: relative; height: 260px; width: 100%; background: #fafafa; border-radius: 0.5rem; padding: 0.5rem; border: 1px solid var(--borde-suave);">
+              <canvas id="graficaPrecio"></canvas>
+            </div>
+
+            <!-- TABLA DE HISTORIAL EXPANDIBLE -->
+            <details style="margin-top: 0.5rem; font-size: 0.8125rem;">
+              <summary style="font-weight: 600; color: var(--cafe-claro); cursor: pointer; padding: 0.25rem 0;">Ver tabla de promedios mensuales (${promediosMensuales.length})</summary>
+              <div style="max-height: 250px; overflow-y: auto; border: 1px solid var(--borde-suave); border-radius: 0.5rem; margin-top: 0.5rem; padding: 0 0.5rem;">
+                ${promediosMensuales.length > 0 ? promediosMensuales.map(p => `
+                  <div style="display: flex; justify-content: space-between; padding: 0.45rem 0; border-bottom: 1px solid var(--borde-suave);">
+                    <span style="color: var(--texto-suave);">${p.mesLabel}</span>
+                    <strong style="color: var(--ambar);">${formatearDinero(p.promedio)}</strong>
+                  </div>
+                `).join("") : '<p style="color: var(--texto-suave); padding: 0.5rem; text-align: center;">Sin historial de precios.</p>'}
+              </div>
+            </details>
+          </div>
+        </div>
+      `;
+
+      // Inicializar la grafica con el filtro mensual
+      cambiarFiltroGrafica('mensual');
+    }
+
+    function cambiarFiltroGrafica(filtro) {
+      const btnMensual = document.getElementById("btnMensual");
+      const btnTodo = document.getElementById("btnTodo");
+
+      let datosFiltrados = [];
+
+      if (filtro === 'mensual') {
+        btnMensual.className = "btn btn-sm btn-primario";
+        btnTodo.className = "btn btn-sm btn-secundario";
+        btnTodo.style.border = "none";
+
+        const ahora = new Date();
+        const hace30dias = new Date();
+        hace30dias.setDate(ahora.getDate() - 30);
+        datosFiltrados = historialProcesadoGlobal.filter(h => h.fecha >= hace30dias);
+      } else {
+        btnMensual.className = "btn btn-sm btn-secundario";
+        btnMensual.style.border = "none";
+        btnTodo.className = "btn btn-sm btn-primario";
+
+        datosFiltrados = historialProcesadoGlobal;
+      }
+
+      // Si no hay datos filtrados (ej. en mensual no hay registros del ultimo mes), usar todos los datos disponibles
+      if (datosFiltrados.length === 0) {
+        datosFiltrados = historialProcesadoGlobal;
+      }
+
+      dibujarGrafica(datosFiltrados);
+    }
+
+    function dibujarGrafica(datos) {
+      const canvas = document.getElementById('graficaPrecio');
+      if (!canvas) return;
+
+      const ctx = canvas.getContext('2d');
+      
+      const labels = datos.map(d => formatearFecha(d.fecha));
+      const precios = datos.map(d => d.precio);
+
+      if (miGrafica) {
+        miGrafica.destroy();
+      }
+
+      // Crear gradiente de fondo (Rosa traslucido a transparente)
+      const gradient = ctx.createLinearGradient(0, 0, 0, 240);
+      gradient.addColorStop(0, 'rgba(219, 39, 119, 0.15)');
+      gradient.addColorStop(1, 'rgba(219, 39, 119, 0.01)');
+
+      miGrafica = new Chart(ctx, {
+        type: 'line',
+        data: {
+          labels: labels,
+          datasets: [{
+            label: 'Precio',
+            data: precios,
+            borderColor: '#db2777', // Rosa Keepa
+            borderWidth: 2,
+            backgroundColor: gradient,
+            fill: true,
+            tension: 0.1, // Linea un poco suavizada
+            pointRadius: datos.length > 30 ? 1 : 4,
+            pointHoverRadius: 6,
+            pointBackgroundColor: '#db2777',
+            pointBorderColor: '#ffffff',
+            pointBorderWidth: 1.5,
+          }]
+        },
+        options: {
+          responsive: true,
+          maintainAspectRatio: false,
+          interaction: {
+            mode: 'index',
+            intersect: false,
+          },
+          plugins: {
+            legend: {
+              display: false
+            },
+            tooltip: {
+              backgroundColor: 'rgba(255, 255, 255, 0.95)',
+              titleColor: '#451a03',
+              bodyColor: '#451a03',
+              borderColor: '#fde68a',
+              borderWidth: 1,
+              padding: 10,
+              displayColors: false,
+              callbacks: {
+                title: function(items) {
+                  return 'Fecha: ' + items[0].label;
+                },
+                label: function(context) {
+                  return 'Precio: ' + formatearDinero(context.raw);
+                }
+              }
+            }
+          },
+          scales: {
+            x: {
+              grid: {
+                color: '#f3f4f6'
+              },
+              ticks: {
+                font: { size: 9, family: 'Segoe UI' },
+                color: '#78716c'
+              }
+            },
+            y: {
+              grid: {
+                color: '#e5e7eb'
+              },
+              ticks: {
+                font: { size: 9, family: 'Segoe UI' },
+                color: '#78716c',
+                callback: function(value) {
+                  return '$' + value.toLocaleString();
+                }
+              }
+            }
+          }
+        }
+      });
+    }
+
+    function cambiarCantidadCompra(delta) {
+      cantidadCompra = Math.max(1, cantidadCompra + delta);
+      const span = document.getElementById("cantidadCompra");
+      if (span) span.textContent = cantidadCompra;
+    }
+
+    async function comprarAhora() {
+      const prod = detalle?.product;
+      if (!prod) return;
+
+      try {
+        const resultado = await Api.realizarCompra(usuario.id, [
+          { id_producto: prod.id_producto, cantidad: cantidadCompra }
+        ]);
+
+        mostrarNotificacion("Compra realizada con éxito.", "exito");
+        
+        const ticket = document.getElementById("ticketCompra");
+        ticket.style.display = "block";
+        ticket.innerHTML = `
+          <div class="tarjeta-simple" style="padding: 1.25rem; border: 1.5px solid var(--borde); margin-bottom: 1.5rem;">
+            <h3 style="font-size: 1rem; font-weight: 700; color: var(--texto); margin-bottom: 0.5rem;">Ticket de Compra</h3>
+            <p style="font-size: 0.75rem; color: var(--texto-suave);">Transacción: <strong>${resultado.id_venta}</strong></p>
+            <p style="font-size: 0.75rem; color: var(--texto-suave);">Fecha: ${formatearFechaHora(resultado.fecha_venta)}</p>
+            <div style="display: flex; justify-content: space-between; border-top: 1px solid var(--borde-suave); border-bottom: 1px solid var(--borde-suave); padding: 0.5rem 0; margin: 0.5rem 0; font-size: 0.8125rem;">
+              <span>${prod.nombre} x${cantidadCompra}</span>
+              <strong>${formatearDinero(resultado.monto_total)}</strong>
+            </div>
+            <div style="display: flex; justify-content: space-between; font-weight: 700; font-size: 0.9375rem;">
+              <span>Total pagado:</span>
+              <span style="color: var(--ambar);">${formatearDinero(resultado.monto_total)}</span>
+            </div>
+          </div>
+        `;
+      } catch (error) {
+        mostrarNotificacion("Error al comprar: " + error.message, "error");
+      }
+    }
+
+    function agregarCarrito() {
+      const prod = detalle?.product;
+      if (!prod) return;
+
+      Carrito.agregar(usuario.id, {
+        id_producto: prod.id_producto,
+        nombre: prod.nombre,
+        precio_actual: parseFloat(prod.precio_actual),
+        marca: prod.marca,
+      }, cantidadCompra);
+
+      actualizarConteoCarrito();
+      mostrarNotificacion("Producto agregado al carrito.", "exito");
+    }
+
+    function actualizarConteoCarrito() {
+      // Intenta actualizar si existe elemento en navbar/sidebar
+    }
+
+    function cerrarSesionNav() {
+      cerrarSesion();
+    }
+
+    // Cargar detalles al iniciar
+    cargarDetalle();
+  </script>
+</body>
+</html>

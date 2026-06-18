@@ -1,12 +1,77 @@
-<!doctype html>
+<!DOCTYPE html>
 <html lang="es">
-  <head>
-    <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Sistema de Analisis de Ventas e Inventario</title>
-  </head>
-  <body class="antialiased">
-    <div id="root"></div>
-    <script type="module" src="/src/main.jsx"></script>
-  </body>
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>NexusMarket - Sistema de Analisis de Ventas</title>
+  <link rel="stylesheet" href="css/estilo.css" />
+</head>
+<body>
+  <div class="contenedor" style="min-height:100vh; position:relative; padding:2rem 0;">
+    <div class="orb orb-1"></div>
+    <div class="orb orb-2"></div>
+    <div class="orb orb-3"></div>
+
+    <header class="header-interior" style="margin-bottom:3rem;">
+      <div class="logo">Nexus<span>Market</span></div>
+      <nav style="display:flex; gap:0.75rem; align-items:center;" id="navInicio"></nav>
+    </header>
+
+    <section style="text-align:center; max-width:700px; margin:0 auto 4rem;">
+      <span class="etiqueta" style="margin-bottom:1rem;">Sistema de Analisis de Ventas</span>
+      <h1 style="font-size:2.25rem; font-weight:800; color:var(--cafe); line-height:1.2; margin-bottom:1rem;">
+        Gestiona inventarios, ventas y <span style="color:var(--ambar);">rendimiento financiero</span>
+      </h1>
+      <p style="color:var(--texto-suave); font-size:1.0625rem; margin-bottom:2rem; max-width:500px; margin-left:auto; margin-right:auto;">
+        NexusMarket te permite administrar productos, analizar precios, generar reportes
+        y optimizar tus decisiones comerciales.
+      </p>
+      <div style="display:flex; gap:1rem; justify-content:center;" id="botonesHero"></div>
+    </section>
+
+    <section style="display:grid; grid-template-columns:repeat(auto-fill, minmax(300px, 1fr)); gap:1.5rem;" id="tarjetasAccion"></section>
+  </div>
+
+  <script src="js/utilerias.js"></script>
+  <script>
+    document.addEventListener("DOMContentLoaded", function () {
+      const usuario = obtenerUsuario();
+      const navInicio = document.getElementById("navInicio");
+      const botonesHero = document.getElementById("botonesHero");
+      const tarjetas = document.getElementById("tarjetasAccion");
+
+      if (usuario.registrado) {
+        navInicio.innerHTML = `
+          <span style="font-size:0.875rem; color:var(--texto-suave);">Hola, ${usuario.nombre}</span>
+          <a href="${usuario.tipo === "Vendedor" ? "vendedor/inventario.html" : "cliente/marketplace.html"}" class="btn btn-primario btn-sm">Ir al panel</a>
+          <button class="btn btn-sm" style="border:1px solid var(--error); color:var(--error);" onclick="cerrarSesion()">Cerrar sesion</button>
+        `;
+        botonesHero.innerHTML = `<a href="${usuario.tipo === "Vendedor" ? "vendedor/inventario.html" : "cliente/marketplace.html"}" class="btn btn-primario btn-lg">Ir a mi panel</a>`;
+      } else {
+        navInicio.innerHTML = `
+          <a href="iniciar-sesion.html" class="btn btn-secundario btn-sm">Iniciar sesion</a>
+          <a href="registrarse.html" class="btn btn-primario btn-sm">Registrarse</a>
+        `;
+        botonesHero.innerHTML = `
+          <a href="iniciar-sesion.html" class="btn btn-primario btn-lg">Comenzar</a>
+          <a href="registrarse.html" class="btn btn-secundario btn-lg">Crear cuenta</a>
+        `;
+      }
+
+      const tarjetasInfo = [
+        { titulo: "Registro de productos", detalle: "Administra tu catalogo, actualiza precios, stock y recibe recomendaciones.", icono: "\uD83D\uDCE6", enlace: "iniciar-sesion.html" },
+        { titulo: "Analisis financiero", detalle: "Visualiza dashboards con indicadores de rendimiento y margen de ganancia.", icono: "\uD83D\uDCCA", enlace: "iniciar-sesion.html" },
+        { titulo: "Marketplace", detalle: "Explora productos, compara precios con historial y recibe recomendaciones.", icono: "\uD83D\uDED2", enlace: "iniciar-sesion.html" },
+      ];
+
+      tarjetasInfo.forEach((t) => {
+        tarjetas.innerHTML += `<a href="${t.enlace}" class="tarjeta" style="display:block; padding:1.5rem; text-decoration:none;">
+          <div style="font-size:2rem; margin-bottom:0.75rem;">${t.icono}</div>
+          <h3 style="font-size:1.125rem; font-weight:700; color:var(--texto); margin-bottom:0.5rem;">${t.titulo}</h3>
+          <p style="font-size:0.875rem; color:var(--texto-suave);">${t.detalle}</p>
+        </a>`;
+      });
+    });
+  </script>
+</body>
 </html>

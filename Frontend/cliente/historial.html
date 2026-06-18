@@ -1,0 +1,201 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Historial de compras - NexusMarket</title>
+  <link rel="stylesheet" href="../css/estilo.css" />
+</head>
+<body>
+  <div class="contenedor-layout">
+    <aside class="sidebar" id="sidebar">
+      <div style="padding:0 1.25rem 1rem; border-bottom:1px solid var(--borde-suave); margin-bottom:0.5rem;">
+        <div class="logo" style="font-size:1rem;">Nexus<span>Market</span></div>
+      </div>
+      <ul class="sidebar-nav">
+        <li><a href="marketplace.html">
+          <svg class="icono" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="9" cy="21" r="1"/><circle cx="20" cy="21" r="1"/><path d="M1 1h4l2.68 13.39a2 2 0 0 0 2 1.61h9.72a2 2 0 0 0 2-1.61L23 6H6"/></svg>
+          <span class="texto-nav">Marketplace</span>
+        </a></li>
+        <li><a href="historial.html" class="activo">
+          <svg class="icono" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg>
+          <span class="texto-nav">Pedidos</span>
+        </a></li>
+      </ul>
+      <div style="padding:1rem 1.25rem; margin-top:auto;">
+        <button class="btn btn-sm btn-block" style="border:1px solid var(--error); color:var(--error);" onclick="cerrarSesionNav()">Cerrar sesion</button>
+      </div>
+    </aside>
+
+    <main class="contenido-principal">
+      <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:1.5rem; flex-wrap:wrap; gap:0.75rem;">
+        <div>
+          <small style="color:var(--texto-suave); text-transform:uppercase; font-weight:600; letter-spacing:0.05em;">Historial</small>
+          <h1 style="font-size:1.5rem; font-weight:700; color:var(--texto);">Mis compras</h1>
+        </div>
+      </div>
+
+      <!-- FILTRO DE PERIODO -->
+      <div style="display:flex; gap:0.5rem; margin-bottom:1.5rem; flex-wrap:wrap;" id="filtrosPeriodo">
+        <button class="btn btn-sm btn-ambarcuado" data-periodo="30d" onclick="seleccionarPeriodo('30d', this)">30 dias</button>
+        <button class="btn btn-sm btn-secundario" data-periodo="3m" onclick="seleccionarPeriodo('3m', this)">3 meses</button>
+        <button class="btn btn-sm btn-secundario" data-periodo="6m" onclick="seleccionarPeriodo('6m', this)">6 meses</button>
+        <button class="btn btn-sm btn-secundario" data-periodo="1y" onclick="seleccionarPeriodo('1y', this)">1 año</button>
+        <button class="btn btn-sm btn-secundario" data-periodo="all" onclick="seleccionarPeriodo('all', this)">Todo</button>
+      </div>
+
+      <!-- LISTA DE COMPRAS -->
+      <div id="listaCompras">
+        <p style="color:var(--texto-suave);">Cargando historial...</p>
+      </div>
+
+      <!-- PAGINACION -->
+      <div class="paginacion" id="paginacion"></div>
+    </main>
+  </div>
+
+  <!-- MODAL TICKET -->
+  <div class="modal-overlay" id="modalTicket" style="display:none;">
+    <div class="modal-contenido" style="max-width:500px;">
+      <div class="modal-cabecera">
+        <h2>Ticket de compra</h2>
+        <button class="btn btn-sm" onclick="cerrarTicket()" style="background:none; border:1px solid var(--borde);">✕</button>
+      </div>
+      <div class="modal-cuerpo" id="contenidoTicket">
+        <p>Cargando...</p>
+      </div>
+    </div>
+  </div>
+
+  <script src="../js/utilerias.js"></script>
+  <script src="../js/api.js"></script>
+  <script>
+    const TAMANO_PAGINA = 8;
+    let periodoActual = "30d";
+    let paginaActual = 1;
+    let totalPaginas = 1;
+
+    const usuario = obtenerUsuario();
+    if (!usuario.registrado || usuario.tipo !== "Cliente") {
+      window.location.href = "../iniciar-sesion.html";
+    }
+
+    function seleccionarPeriodo(periodo, btn) {
+      periodoActual = periodo;
+      document.querySelectorAll("#filtrosPeriodo button").forEach((b) => {
+        b.className = "btn btn-sm btn-secundario";
+      });
+      btn.className = "btn btn-sm btn-ambarcuado";
+      cargarHistorial(1);
+    }
+
+    async function cargarHistorial(pagina = 1) {
+      paginaActual = pagina;
+      try {
+        const datos = await Api.listarComprasCliente(usuario.id, periodoActual, pagina, TAMANO_PAGINA);
+        const compras = datos.items || [];
+        totalPaginas = datos.total_pages || 1;
+        paginaActual = datos.page || 1;
+        renderizarCompras(compras);
+        renderizarPaginacion();
+      } catch (error) {
+        document.getElementById("listaCompras").innerHTML =
+          `<p style="color:var(--error);">Error: ${error.message}</p>`;
+      }
+    }
+
+    function renderizarCompras(compras) {
+      const div = document.getElementById("listaCompras");
+
+      if (compras.length === 0) {
+        div.innerHTML = '<p style="color:var(--texto-suave); text-align:center; padding:2rem;">No hay compras en este periodo.</p>';
+        return;
+      }
+
+      div.innerHTML = compras.map((c) => `
+        <div class="tarjeta-simple" style="margin-bottom:0.75rem; padding:1rem; cursor:pointer;" onclick="abrirTicket('${c.id_venta}')">
+          <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:0.5rem;">
+            <div>
+              <strong style="display:block; font-size:0.8125rem; color:#78716c; margin-bottom:0.125rem;">Folio: ${c.id_venta}</strong>
+              <small style="color:var(--texto-suave); font-size:0.75rem;">${formatearFechaHora(c.fecha_venta)}</small>
+              <p style="font-size:0.875rem; font-weight:600; color:var(--texto); margin-top:0.25rem;">${truncarTexto(c.resumen || "Compra", 50)}</p>
+            </div>
+            <div style="text-align:right;">
+              <strong style="color:var(--ambar); font-size:1.125rem;">${formatearDinero(c.monto_total)}</strong>
+              <small style="display:block; color:var(--texto-suave);">${c.total_unidades} unidades</small>
+            </div>
+          </div>
+        </div>
+      `).join("");
+    }
+
+    function renderizarPaginacion() {
+      const div = document.getElementById("paginacion");
+      if (totalPaginas <= 1) { div.innerHTML = ""; return; }
+
+      let html = "";
+      html += `<button ${paginaActual <= 1 ? "disabled" : ""} onclick="cargarHistorial(1)">Primera</button>`;
+      html += `<button ${paginaActual <= 1 ? "disabled" : ""} onclick="cargarHistorial(${paginaActual - 1})">Anterior</button>`;
+
+      for (let i = Math.max(1, paginaActual - 2); i <= Math.min(totalPaginas, paginaActual + 2); i++) {
+        html += `<button class="${i === paginaActual ? "activa" : ""}" onclick="cargarHistorial(${i})">${i}</button>`;
+      }
+
+      html += `<button ${paginaActual >= totalPaginas ? "disabled" : ""} onclick="cargarHistorial(${paginaActual + 1})">Siguiente</button>`;
+      html += `<button ${paginaActual >= totalPaginas ? "disabled" : ""} onclick="cargarHistorial(${totalPaginas})">Ultima</button>`;
+      html += `<span>Pagina ${paginaActual} de ${totalPaginas}</span>`;
+
+      div.innerHTML = html;
+    }
+
+    async function abrirTicket(idVenta) {
+      document.getElementById("modalTicket").style.display = "flex";
+      document.getElementById("contenidoTicket").innerHTML = "<p>Cargando ticket...</p>";
+
+      try {
+        const ticket = await Api.obtenerTicketCompra(idVenta);
+        document.getElementById("contenidoTicket").innerHTML = `
+          <p style="font-size:0.8125rem; color:var(--texto-suave);">
+            Venta: <strong>${ticket.id_venta}</strong>
+          </p>
+          <p style="font-size:0.8125rem; color:var(--texto-suave);">
+            Fecha: ${formatearFechaHora(ticket.fecha_venta)}
+          </p>
+          <p style="font-size:0.8125rem; color:var(--texto-suave);">
+            Cliente: ${ticket.cliente?.nombre || "---"}
+          </p>
+          ${ticket.vendedor?.nombre ? `<p style="font-size:0.8125rem; color:var(--texto-suave);">Vendedor: ${ticket.vendedor.nombre}</p>` : ""}
+          <hr style="margin:0.75rem 0; border-color:var(--borde-suave);" />
+          ${(ticket.items || []).map((item) => `
+            <div class="ticket-item">
+              <span><span class="texto-truncado-xl" title="${item.nombre || ""}">${truncarTexto(item.nombre, 30)}</span> x${item.cantidad}</span>
+              <span>${formatearDinero(item.subtotal)}</span>
+            </div>
+          `).join("")}
+          <div class="ticket-total">
+            <span>Total</span>
+            <span>${formatearDinero(ticket.monto_total)}</span>
+          </div>
+        `;
+      } catch (error) {
+        document.getElementById("contenidoTicket").innerHTML =
+          `<p style="color:var(--error);">Error: ${error.message}</p>`;
+      }
+    }
+
+    function cerrarTicket() {
+      document.getElementById("modalTicket").style.display = "none";
+    }
+
+    function cerrarSesionNav() {
+      cerrarSesion();
+    }
+
+    document.getElementById("modalTicket").addEventListener("click", function (e) {
+      if (e.target === this) cerrarTicket();
+    });
+
+    cargarHistorial();
+  </script>
+</body>
+</html>

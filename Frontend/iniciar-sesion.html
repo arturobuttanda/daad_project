@@ -1,0 +1,330 @@
+<!DOCTYPE html>
+<html lang="es">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Iniciar sesion - NexusMarket</title>
+
+  <link rel="stylesheet" href="css/estilo.css">
+
+  <script>
+    window.addEventListener('error', function (e) {
+      alert("Error de carga: " + e.message + " en " + e.filename + ":" + e.lineno);
+    });
+  </script>
+</head>
+
+<body style="
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  min-height:100vh;
+  padding:2rem;
+  background-image:url('/Imagenes/ImagenLogin.png');
+  background-size:cover;
+  background-position:center;
+  background-repeat:no-repeat;
+">
+
+  <div class="contenedor-estrecho">
+
+    <div class="tarjeta-simple" style="padding:2.5rem;">
+
+      <div style="text-align:center; margin-bottom:1.5rem;">
+        <div class="logo" style="font-size:1.5rem;">
+          Nexus<span>Market</span>
+        </div>
+
+        <p style="color:var(--texto-suave); font-size:0.875rem; margin-top:0.5rem;">
+          Inicia sesion para continuar
+        </p>
+      </div>
+
+      <!-- PESTAÑAS -->
+      <div style="
+        display:flex;
+        gap:0;
+        margin-bottom:1.5rem;
+        border:1px solid var(--borde);
+        border-radius:0.75rem;
+        overflow:hidden;
+      ">
+
+        <a href="iniciar-sesion.html"
+          class="btn"
+          style="
+            flex:1;
+            border-radius:0;
+            background:var(--ambar);
+            color:white;
+            border:none;
+          ">
+          Iniciar sesion
+        </a>
+
+        <a href="registrarse.html"
+          class="btn"
+          style="
+            flex:1;
+            border-radius:0;
+            background:white;
+            color:var(--cafe-claro);
+            border:none;
+          ">
+          Registrarse
+        </a>
+
+      </div>
+
+      <!-- SELECTOR DE PORTAL -->
+      <div
+        id="selectorPortal"
+        style="
+          display:flex;
+          gap:0.5rem;
+          margin-bottom:1.25rem;
+        ">
+
+        <button
+          type="button"
+          class="btn btn-sm"
+          data-portal="Cliente"
+          onclick="seleccionarPortal('Cliente')"
+          style="
+            flex:1;
+            background:var(--borde-suave);
+            color:var(--cafe-claro);
+            border:1px solid var(--borde);
+          ">
+          Cliente
+        </button>
+
+        <button
+          type="button"
+          class="btn btn-sm"
+          data-portal="Vendedor"
+          onclick="seleccionarPortal('Vendedor')"
+          style="
+            flex:1;
+            background:white;
+            color:var(--cafe-claro);
+            border:1px solid var(--borde);
+          ">
+          Vendedor
+        </button>
+
+      </div>
+
+      <form id="formularioLogin">
+
+        <div class="grupo-campo">
+          <label for="correo">Correo electronico</label>
+
+          <input
+            type="email"
+            id="correo"
+            class="campo"
+            placeholder="correo@ejemplo.com"
+            required>
+        </div>
+
+        <div class="grupo-campo">
+
+          <label for="contrasena">Contraseña</label>
+
+          <div style="position:relative;">
+
+            <input
+              type="password"
+              id="contraseña"
+              class="campo"
+              placeholder="Ingresa tu contraseña"
+              required
+              style="padding-right:2.5rem;">
+
+            <button
+              type="button"
+              onclick="togglePassword()"
+              style="
+                position:absolute;
+                right:0.75rem;
+                top:50%;
+                transform:translateY(-50%);
+                background:none;
+                border:none;
+                cursor:pointer;
+                font-size:0.75rem;
+                color:var(--texto-suave);
+              ">
+              Mostrar
+            </button>
+
+          </div>
+
+        </div>
+
+        <button
+          type="submit"
+          class="btn btn-primario btn-block btn-lg mt-2"
+          id="btnEnviar">
+          Iniciar sesion
+        </button>
+
+      </form>
+
+    </div>
+
+  </div>
+
+  <script src="js/utilerias.js"></script>
+  <script src="js/api.js"></script>
+
+  <script>
+
+    let portalSeleccionado = "Cliente";
+
+    function seleccionarPortal(portal) {
+
+      portalSeleccionado = portal;
+
+      document.querySelectorAll("#selectorPortal button").forEach((btn) => {
+
+        if (btn.dataset.portal === portal) {
+
+          btn.style.background = "var(--borde-suave)";
+          btn.style.borderColor = "var(--ambar)";
+
+        } else {
+
+          btn.style.background = "white";
+          btn.style.borderColor = "var(--borde)";
+
+        }
+
+      });
+
+    }
+
+    function togglePassword() {
+
+      const input = document.getElementById("contraseña");
+
+      input.type =
+        input.type === "password"
+          ? "text"
+          : "password";
+
+    }
+
+    document
+      .getElementById("formularioLogin")
+      .addEventListener("submit", async function (e) {
+
+        e.preventDefault();
+
+        const correo =
+          document.getElementById("correo").value.trim();
+
+        const contrasena =
+          document.getElementById("contraseña").value;
+
+        const btn =
+          document.getElementById("btnEnviar");
+
+        if (!correo.includes("@")) {
+
+          mostrarNotificacion(
+            "Ingresa un correo valido.",
+            "error"
+          );
+
+          return;
+        }
+
+        if (!contrasena) {
+
+          mostrarNotificacion(
+            "Ingresa tu contraseña.",
+            "error"
+          );
+
+          return;
+        }
+
+        btn.disabled = true;
+        btn.textContent = "Ingresando...";
+
+        try {
+
+          const respuesta =
+            await Api.iniciarSesion(
+              correo,
+              contrasena,
+              portalSeleccionado
+            );
+
+          localStorage.setItem(
+            "isRegistered",
+            "true"
+          );
+
+          localStorage.setItem(
+            "userType",
+            respuesta.tipo_usuario
+          );
+
+          localStorage.setItem(
+            "userName",
+            respuesta.nombre
+          );
+
+          localStorage.setItem(
+            "userId",
+            respuesta.id
+          );
+
+          mostrarNotificacion(
+            "Sesion iniciada correctamente.",
+            "exito"
+          );
+
+          setTimeout(() => {
+
+            if (
+              respuesta.tipo_usuario === "Vendedor"
+            ) {
+
+              window.location.href =
+                "vendedor/inventario.html";
+
+            } else {
+
+              window.location.href =
+                "cliente/marketplace.html";
+
+            }
+
+          }, 500);
+
+        } catch (error) {
+
+          mostrarNotificacion(
+            error.message ||
+            "Error al iniciar sesion.",
+            "error"
+          );
+
+          btn.disabled = false;
+          btn.textContent =
+            "Iniciar sesion";
+
+        }
+
+      });
+
+  </script>
+
+</body>
+
+</html>

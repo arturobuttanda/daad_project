@@ -48,24 +48,27 @@ def _validar_nombre(nombre: str) -> str:
   return nombre_limpio
 
 
-def _validar_password(password: str) -> str:
-  password_limpio = _limpiar_texto(password)
-  if len(password_limpio) < 8:
+def _validar_contrasena(contrasena: str) -> str:
+  """Valida que la contrasena cumpla los criterios minimos."""
+  pass_limpio = _limpiar_texto(contrasena)
+  if len(pass_limpio) < 8:
     raise ValueError("La contrasena debe tener al menos 8 caracteres.")
-  if not any(caracter.isupper() for caracter in password_limpio):
+  if not any(caracter.isupper() for caracter in pass_limpio):
     raise ValueError("La contrasena debe incluir una mayuscula.")
-  if not any(caracter.isdigit() for caracter in password_limpio):
+  if not any(caracter.isdigit() for caracter in pass_limpio):
     raise ValueError("La contrasena debe incluir un numero.")
-  return password_limpio
+  return pass_limpio
 
 
 def _producto_a_diccionario(producto: Producto | dict[str, object | None]) -> dict[str, object | None]:
+  """Convierte un Producto o diccionario a diccionario estandar."""
   if isinstance(producto, Producto):
     return producto.a_diccionario()
   return dict(producto)
 
 
 def _parse_fecha_historica(valor: object | None) -> datetime:
+  """Convierte un valor de fecha a datetime."""
   if isinstance(valor, datetime):
     return valor
   if isinstance(valor, date):
@@ -91,7 +94,7 @@ class Persona(ABC):
     telefono: str | None,
     correo: str,
     tipo_usuario: str,
-    password_hash: str | None = None,
+    contrasena_hash: str | None = None,
   ):
     if type(self) is Persona:
       raise TypeError("No se puede instanciar la clase abstracta Persona directamente.")
@@ -100,7 +103,7 @@ class Persona(ABC):
     self.telefono = _normalizar_numero(telefono)
     self.correo = _normalizar_correo(correo)
     self.tipo_usuario = _limpiar_texto(tipo_usuario)
-    self.password_hash = _limpiar_texto(password_hash) if password_hash is not None else None
+    self.contrasena_hash = _limpiar_texto(contrasena_hash) if contrasena_hash is not None else None
 
   def cambiar_nombre(self, nuevo_nombre: str) -> None:
     self.nombre = _validar_nombre(nuevo_nombre)
@@ -118,7 +121,7 @@ class Persona(ABC):
     contrasena_hash = _limpiar_texto(nueva_contrasena_hash)
     if not contrasena_hash:
       raise ValueError("El hash de la contrasena no puede estar vacio.")
-    self.password_hash = contrasena_hash
+    self.contrasena_hash = contrasena_hash
 
   def actualizar_perfil(
     self,
@@ -137,6 +140,7 @@ class Persona(ABC):
       self.cambiar_contrasena(contrasena_hash)
 
   def a_diccionario_publico(self) -> dict[str, object | None]:
+    """Devuelve informacion publica del usuario (sin hash ni datos sensibles)."""
     return {
       "id": self.id,
       "nombre": self.nombre,
@@ -145,23 +149,23 @@ class Persona(ABC):
     }
 
   def a_fila(self) -> dict[str, object | None]:
+    """Devuelve los datos del usuario para insertar en la base de datos."""
     return {
       "id_usuario": self.id,
       "nombre": self.nombre,
       "telefono": self.telefono or None,
       "correo": self.correo,
       "tipo_usuario": self.tipo_usuario,
-      "password_hash": self.password_hash,
+      "password_hash": self.contrasena_hash,
     }
-
-  # Nota: el método en inglés fue eliminado. Usar `desde_fila_usuario`.
 
   @classmethod
   def desde_fila_usuario(
     cls,
     fila: Sequence[object],
-    password_hash: str | None = None,
+    contrasena_hash: str | None = None,
   ) -> "Persona":
+    """Crea una Persona (Cliente o Vendedor) desde una fila de la BD."""
     id_usuario = str(fila[0])
     nombre = str(fila[1])
     telefono = fila[2] if len(fila) > 2 else None
@@ -176,7 +180,7 @@ class Persona(ABC):
         correo=correo,
         id_vendedor=id_usuario,
         codigo_vendedor=id_usuario,
-        password_hash=password_hash,
+        contrasena_hash=contrasena_hash,
       )
 
     return Cliente(
@@ -184,7 +188,7 @@ class Persona(ABC):
       nombre=nombre,
       telefono=telefono if telefono is not None else None,
       correo=correo,
-      password_hash=password_hash,
+      contrasena_hash=contrasena_hash,
     )
 
 
@@ -217,6 +221,7 @@ class Producto:
 
   @classmethod
   def desde_dict(cls, datos: dict[str, object | None]) -> "Producto":
+    """Crea un Producto desde un diccionario."""
     return cls(
       id_producto=str(datos.get("id_producto") or ""),
       nombre=str(datos.get("nombre") or ""),
@@ -232,9 +237,9 @@ class Producto:
 
   @classmethod
   def desde_fila(cls, fila: Sequence[object], columnas: Sequence[str]) -> "Producto":
+    """Crea un Producto desde una fila de resultados SQL."""
     datos = dict(zip(columnas, fila))
     return cls.desde_dict(datos)
-
 
   def cambiar_precio(self, nuevo_precio: float) -> None:
     precio_limpio = float(nuevo_precio)
@@ -243,6 +248,7 @@ class Producto:
     self.precio_actual = round(precio_limpio, 2)
 
   def ajustar_precio(self, porcentaje: float) -> None:
+    """Ajusta el precio actual aplicando un porcentaje (ej: 0.10 = +10%)."""
     if self.precio_actual is None:
       raise ValueError("El producto no tiene precio actual.")
     self.cambiar_precio(self.precio_actual * (1 + float(porcentaje)))
@@ -254,6 +260,7 @@ class Producto:
     self.stock = stock_limpio
 
   def aplicar_descuento(self, porcentaje: float) -> None:
+    """Aplica un descuento porcentual al precio (ej: 0.15 = -15%)."""
     if self.precio_actual is None:
       raise ValueError("El producto no tiene precio actual.")
     self.cambiar_precio(self.precio_actual * (1 - float(porcentaje)))
@@ -391,7 +398,7 @@ def crear_venta_por_item(
   cantidad: int,
   fecha_venta: date | datetime | None = None,
 ) -> tuple[Venta, dict[str, object | None], int, float, float | None]:
-  """Construye el objeto Venta y el detalle de venta desde los datos del producto."""
+  """Construye el objeto Venta y el detalle desde los datos del producto."""
   if cantidad <= 0:
     raise ValueError("La cantidad debe ser mayor que cero.")
 
@@ -408,11 +415,11 @@ def crear_venta_por_item(
     raise ValueError("No hay stock suficiente para completar la venta.")
 
   producto.actualizar_stock(producto.stock - cantidad)
-  unit_price = float(precio_actual or 0.0)
-  subtotal = round(unit_price * cantidad, 2)
-  profit = None
+  precio_unitario = float(precio_actual or 0.0)
+  subtotal = round(precio_unitario * cantidad, 2)
+  ganancia = None
   if precio_fabricacion is not None:
-    profit = round((unit_price - float(precio_fabricacion)) * cantidad, 2)
+    ganancia = round((precio_unitario - float(precio_fabricacion)) * cantidad, 2)
 
   if vendedor is not None:
     venta = vendedor.vender_producto(
@@ -428,7 +435,7 @@ def crear_venta_por_item(
       producto=producto,
       cantidad=cantidad,
       fecha_venta=fecha_venta,
-      precio_unitario=unit_price,
+      precio_unitario=precio_unitario,
     )
 
   if cliente is not None:
@@ -437,13 +444,13 @@ def crear_venta_por_item(
   detalle = {
     "id_producto": id_producto,
     "cantidad": cantidad,
-    "precio_unitario": unit_price,
+    "precio_unitario": precio_unitario,
     "costo_unitario": float(precio_fabricacion) if precio_fabricacion is not None else None,
     "subtotal": subtotal,
-    "margen_unitario": round(unit_price - float(precio_fabricacion), 2) if precio_fabricacion is not None else None,
+    "margen_unitario": round(precio_unitario - float(precio_fabricacion), 2) if precio_fabricacion is not None else None,
   }
 
-  return venta, detalle, producto.stock, subtotal, profit
+  return venta, detalle, producto.stock, subtotal, ganancia
 
 
 class Informe:
@@ -528,145 +535,169 @@ def calcular_recomendacion_precio(
   catalogo: list[dict[str, object | None]] | None,
   limite: int = 5,
 ) -> dict[str, object | None]:
+  """Calcula una recomendacion de precio completa usando historial, competencia y similitud.
+
+  Analiza el precio actual contra el historial, la competencia, el mercado
+  y productos similares para generar una senial de compra, precio sugerido
+  y puntuacion vectorial.
+
+  Argumentos:
+    producto: Producto a analizar (objeto o dict).
+    historial: Lista de diccionarios con 'fecha' y 'precio'.
+    competencia_promedio: Precio promedio de la competencia.
+    catalogo: Lista de productos del catalogo para similitud.
+    limite: Numero maximo de similares a considerar.
+
+  Retorna:
+    Dict con signal, suggested_price, reason, margin_percent,
+    competition_average, market_reference_*, trend_label,
+    estimated_buy_date, buy_now, buy_reason, similar_products.
+  """
   producto_dict = _producto_a_diccionario(producto)
-  current_price = float(producto_dict.get("precio_actual") or 0)
-  cost_price = float(producto_dict.get("precio_fabricacion") or 0)
+  precio_actual = float(producto_dict.get("precio_actual") or 0)
+  precio_costo = float(producto_dict.get("precio_fabricacion") or 0)
   stock = int(producto_dict.get("stock") or 0)
 
   catalogo_similares = catalogo or []
-  similar_products = rankear_productos_similares(
+  productos_similares = rankear_productos_similares(
     producto_dict,
     catalogo_similares,
     limit=limite,
     exclude_product_id=str(producto_dict.get("id_producto") or ""),
   )
-  market_reference, market_floor, market_ceiling = resumir_precios_similares(similar_products)
+  referencia_mercado, piso_mercado, techo_mercado = resumir_precios_similares(productos_similares)
 
-  history = list(historial or [])
-  history_prices = [float(item["precio"]) for item in history if item.get("precio") is not None]
-  history_dates = [_parse_fecha_historica(item.get("fecha")) for item in history]
+  historial_lista = list(historial or [])
+  precios_historial = [float(item["precio"]) for item in historial_lista if item.get("precio") is not None]
+  fechas_historial = [_parse_fecha_historica(item.get("fecha")) for item in historial_lista]
 
-  average_history = float(np.mean(history_prices)) if history_prices else current_price
-  minimum_history = float(np.min(history_prices)) if history_prices else current_price
-  latest_date = history_dates[-1] if history_dates else datetime.utcnow()
-  stagnant_days = max((datetime.utcnow() - latest_date).days, 0)
-  competition_gap = (
-    ((current_price - competencia_promedio) / competencia_promedio)
+  promedio_historial = float(np.mean(precios_historial)) if precios_historial else precio_actual
+  minimo_historial = float(np.min(precios_historial)) if precios_historial else precio_actual
+  ultima_fecha = fechas_historial[-1] if fechas_historial else datetime.utcnow()
+  dias_estancado = max((datetime.utcnow() - ultima_fecha).days, 0)
+  brecha_competencia = (
+    ((precio_actual - competencia_promedio) / competencia_promedio)
     if competencia_promedio and competencia_promedio > 0
     else 0.0
   )
-  margin = ((current_price - cost_price) / cost_price) if cost_price > 0 else 0.0
-  similarity_gap = (
-    ((current_price - market_reference) / market_reference)
-    if market_reference and market_reference > 0
+  margen = ((precio_actual - precio_costo) / precio_costo) if precio_costo > 0 else 0.0
+  brecha_similitud = (
+    ((precio_actual - referencia_mercado) / referencia_mercado)
+    if referencia_mercado and referencia_mercado > 0
     else 0.0
   )
 
-  if current_price <= minimum_history * 1.02:
-    signal = "es el precio mas bajo de los ultimos dias"
-  elif current_price > average_history * 1.03:
-    signal = "el precio esta por arriba del promedio"
+  # Senial basada en historial de precios
+  if precio_actual <= minimo_historial * 1.02:
+    senial = "es el precio mas bajo de los ultimos dias"
+  elif precio_actual > promedio_historial * 1.03:
+    senial = "el precio esta por arriba del promedio"
   else:
-    signal = "el precio esta en su precio promedio"
+    senial = "el precio esta en su precio promedio"
 
-  suggested_price = current_price
-  reason = "El precio actual se mantiene competitivo."
+  precio_sugerido = precio_actual
+  razon = "El precio actual se mantiene competitivo."
 
-  if market_reference and current_price > 0:
-    suggested_price = round(market_reference * 0.98, 2)
-    reason = "Se propone un precio ligeramente por debajo del grupo de productos similares para ser competitivo."
+  # Logica de ajuste de precio basada en condiciones de mercado
+  if referencia_mercado and precio_actual > 0:
+    precio_sugerido = round(referencia_mercado * 0.98, 2)
+    razon = "Se propone un precio ligeramente por debajo del grupo de productos similares para ser competitivo."
 
-  if cost_price > 0:
-    floor_price = round(cost_price * 1.12, 2)
-    suggested_price = max(suggested_price, floor_price)
-    if suggested_price == floor_price:
-      reason = "Se respeta un margen minimo sobre el costo y se ajusta frente a productos similares."
+  if precio_costo > 0:
+    precio_piso = round(precio_costo * 1.12, 2)
+    precio_sugerido = max(precio_sugerido, precio_piso)
+    if precio_sugerido == precio_piso:
+      razon = "Se respeta un margen minimo sobre el costo y se ajusta frente a productos similares."
 
-  if cost_price > 0 and margin < 0.1 and not market_reference:
-    suggested_price = round(cost_price * 1.1, 2)
-    reason = "Se ajusta para asegurar una ganancia superior al 10%."
-  elif stagnant_days >= 21 and competition_gap > 0:
-    floor_price = round(cost_price * 1.1, 2) if cost_price > 0 else current_price * 0.95
-    suggested_price = max(floor_price, round(current_price * 0.95, 2))
-    reason = "El producto lleva demasiado tiempo estancado; conviene bajar el precio para aumentar el giro."
-  elif competencia_promedio and current_price > competencia_promedio * 1.05:
-    floor_price = round(cost_price * 1.1, 2) if cost_price > 0 else current_price * 0.95
-    suggested_price = max(floor_price, round(competencia_promedio * 0.99, 2))
-    reason = "El precio esta por encima de la competencia de mercado."
-  elif stock >= 40 and current_price > average_history:
-    floor_price = round(cost_price * 1.1, 2) if cost_price > 0 else current_price * 0.97
-    suggested_price = max(floor_price, round(current_price * 0.97, 2))
-    reason = "Hay inventario suficiente; una ligera bajada puede acelerar la rotacion."
+  if precio_costo > 0 and margen < 0.1 and not referencia_mercado:
+    precio_sugerido = round(precio_costo * 1.1, 2)
+    razon = "Se ajusta para asegurar una ganancia superior al 10%."
+  elif dias_estancado >= 21 and brecha_competencia > 0:
+    precio_piso = round(precio_costo * 1.1, 2) if precio_costo > 0 else precio_actual * 0.95
+    precio_sugerido = max(precio_piso, round(precio_actual * 0.95, 2))
+    razon = "El producto lleva demasiado tiempo estancado; conviene bajar el precio para aumentar el giro."
+  elif competencia_promedio and precio_actual > competencia_promedio * 1.05:
+    precio_piso = round(precio_costo * 1.1, 2) if precio_costo > 0 else precio_actual * 0.95
+    precio_sugerido = max(precio_piso, round(competencia_promedio * 0.99, 2))
+    razon = "El precio esta por encima de la competencia de mercado."
+  elif stock >= 40 and precio_actual > promedio_historial:
+    precio_piso = round(precio_costo * 1.1, 2) if precio_costo > 0 else precio_actual * 0.97
+    precio_sugerido = max(precio_piso, round(precio_actual * 0.97, 2))
+    razon = "Hay inventario suficiente; una ligera bajada puede acelerar la rotacion."
 
-  if market_reference:
-    if current_price <= market_reference * 0.97:
-      signal = "está por debajo del mercado comparable"
-    elif current_price > market_reference * 1.05:
-      signal = "está por encima de productos similares"
+  # Actualizar senial segun referencia de mercado
+  if referencia_mercado:
+    if precio_actual <= referencia_mercado * 0.97:
+      senial = "esta por debajo del mercado comparable"
+    elif precio_actual > referencia_mercado * 1.05:
+      senial = "esta por encima de productos similares"
     else:
-      signal = "se mantiene cerca del mercado comparable"
+      senial = "se mantiene cerca del mercado comparable"
 
-  trend_label = "estable"
-  estimated_buy_date = None
-  slope = 0.0
-  buy_now = True
-  buy_reason = "El precio se mantiene razonable frente al historial y a productos similares."
+  etiqueta_tendencia = "estable"
+  fecha_estimada_compra = None
+  pendiente = 0.0
+  comprar_ahora = True
+  razon_compra = "El precio se mantiene razonable frente al historial y a productos similares."
 
-  if len(history_prices) >= 2:
-    x_values = np.array([(item_date - history_dates[0]).days for item_date in history_dates], dtype=float)
-    y_values = np.array(history_prices, dtype=float)
-    slope, _intercept = np.polyfit(x_values, y_values, 1)
-    if slope < 0 and suggested_price < current_price:
-      days_until_target = (suggested_price - history_prices[-1]) / slope if slope != 0 else None
-      if days_until_target and days_until_target > 0:
-        estimated_date = history_dates[-1] + timedelta(days=math.ceil(days_until_target))
-        estimated_buy_date = estimated_date.date().isoformat()
-        trend_label = "a la baja"
-    elif slope > 0:
-      trend_label = "al alza"
+  # Analisis de tendencia historica
+  if len(precios_historial) >= 2:
+    valores_x = np.array([(item_date - fechas_historial[0]).days for item_date in fechas_historial], dtype=float)
+    valores_y = np.array(precios_historial, dtype=float)
+    pendiente, _intercepto = np.polyfit(valores_x, valores_y, 1)
+    if pendiente < 0 and precio_sugerido < precio_actual:
+      dias_para_objetivo = (precio_sugerido - precios_historial[-1]) / pendiente if pendiente != 0 else None
+      if dias_para_objetivo and dias_para_objetivo > 0:
+        fecha_estimada = fechas_historial[-1] + timedelta(days=math.ceil(dias_para_objetivo))
+        fecha_estimada_compra = fecha_estimada.date().isoformat()
+        etiqueta_tendencia = "a la baja"
+    elif pendiente > 0:
+      etiqueta_tendencia = "al alza"
 
-  if market_reference:
-    if current_price <= market_reference * 0.97 and slope <= 0:
-      buy_now = True
-      buy_reason = "Está por debajo de los productos comparables y la tendencia no apunta a un alza inmediata."
-    elif current_price > market_reference * 1.05 or slope > 0:
-      buy_now = False
-      buy_reason = "Conviene esperar: el precio está por encima del mercado comparable o la tendencia sube."
-  elif slope > 0 and current_price > average_history:
-    buy_now = False
-    buy_reason = "La tendencia histórica va al alza y el precio sigue moviéndose por encima del promedio."
+  # Logica de "comprar ahora o esperar"
+  if referencia_mercado:
+    if precio_actual <= referencia_mercado * 0.97 and pendiente <= 0:
+      comprar_ahora = True
+      razon_compra = "Esta por debajo de los productos comparables y la tendencia no apunta a un alza inmediata."
+    elif precio_actual > referencia_mercado * 1.05 or pendiente > 0:
+      comprar_ahora = False
+      razon_compra = "Conviene esperar: el precio esta por encima del mercado comparable o la tendencia sube."
+  elif pendiente > 0 and precio_actual > promedio_historial:
+    comprar_ahora = False
+    razon_compra = "La tendencia historica va al alza y el precio sigue moviendose por encima del promedio."
 
-  features = np.array([
-    margin,
-    max(competition_gap, 0.0),
-    max(similarity_gap, 0.0),
-    min(stagnant_days / 30.0, 3.0),
+  # Puntuacion vectorial con pesos
+  caracteristicas = np.array([
+    margen,
+    max(brecha_competencia, 0.0),
+    max(brecha_similitud, 0.0),
+    min(dias_estancado / 30.0, 3.0),
     min(stock / 50.0, 2.0),
   ])
-  weights = np.array([0.44, 0.18, 0.18, 0.12, -0.08])
-  vector_score = float(np.dot(features, weights))
+  pesos = np.array([0.44, 0.18, 0.18, 0.12, -0.08])
+  puntuacion_vectorial = float(np.dot(caracteristicas, pesos))
 
   return {
-    "signal": signal,
-    "suggested_price": suggested_price,
-    "reason": reason,
-    "margin_percent": round(margin * 100, 2),
+    "signal": senial,
+    "suggested_price": precio_sugerido,
+    "reason": razon,
+    "margin_percent": round(margen * 100, 2),
     "competition_average": competencia_promedio,
-    "market_reference_price": round(market_reference, 2) if market_reference is not None else None,
-    "market_reference_floor": round(market_floor, 2) if market_floor is not None else None,
-    "market_reference_ceiling": round(market_ceiling, 2) if market_ceiling is not None else None,
-    "trend_label": trend_label,
-    "estimated_buy_date": estimated_buy_date,
-    "stagnant_days": stagnant_days,
-    "vector_score": round(vector_score, 4),
-    "buy_now": buy_now,
-    "buy_reason": buy_reason,
-    "similar_products": similar_products,
+    "market_reference_price": round(referencia_mercado, 2) if referencia_mercado is not None else None,
+    "market_reference_floor": round(piso_mercado, 2) if piso_mercado is not None else None,
+    "market_reference_ceiling": round(techo_mercado, 2) if techo_mercado is not None else None,
+    "trend_label": etiqueta_tendencia,
+    "estimated_buy_date": fecha_estimada_compra,
+    "stagnant_days": dias_estancado,
+    "vector_score": round(puntuacion_vectorial, 4),
+    "buy_now": comprar_ahora,
+    "buy_reason": razon_compra,
+    "similar_products": productos_similares,
   }
 
 
 class Cliente(Persona):
-  """Rol de consumidor."""
+  """Rol de consumidor con capacidad de analisis de precios y compras."""
 
   def __init__(
     self,
@@ -676,9 +707,9 @@ class Cliente(Persona):
     correo: str,
     presupuesto_maximo: float = 0.0,
     historial_compras: Sequence[Venta] | None = None,
-    password_hash: str | None = None,
+    contrasena_hash: str | None = None,
   ):
-    super().__init__(id_persona, nombre, telefono, correo, tipo_usuario="Cliente", password_hash=password_hash)
+    super().__init__(id_persona, nombre, telefono, correo, tipo_usuario="Cliente", contrasena_hash=contrasena_hash)
     self.historial_compras = list(historial_compras or [])
     self.presupuesto_maximo = float(presupuesto_maximo)
 
@@ -687,6 +718,7 @@ class Cliente(Persona):
     producto: Producto | dict[str, object | None],
     precios_historial: Iterable[float] | None = None,
   ) -> float | None:
+    """Encuentra el precio mas bajo del historial o el actual."""
     precios = [float(precio) for precio in precios_historial or [] if precio is not None]
     if precios:
       return float(min(precios))
@@ -698,6 +730,7 @@ class Cliente(Persona):
     producto: Producto | dict[str, object | None],
     precios_historial: Iterable[float] | None = None,
   ) -> str:
+    """Genera un analisis textual del precio del producto."""
     precio_actual = _producto_a_diccionario(producto).get("precio_actual")
     if precio_actual is None:
       return "No hay precio disponible para analizar."
@@ -715,6 +748,7 @@ class Cliente(Persona):
     competencia_promedio: float | None = None,
     catalogo: list[dict[str, object | None]] | None = None,
   ) -> str:
+    """Obtiene una recomendacion textual de compra."""
     recomendacion = calcular_recomendacion_precio(producto, precios_historial, competencia_promedio, catalogo)
     if recomendacion.get("buy_now"):
       return "Conviene comprar ahora."
@@ -731,7 +765,7 @@ class Cliente(Persona):
 
 
 class Vendedor(Persona):
-  """Rol operativo con acceso a inventario y precios."""
+  """Rol operativo con acceso a inventario, ventas y precios."""
 
   def __init__(
     self,
@@ -744,9 +778,9 @@ class Vendedor(Persona):
     especialidad: str | None = None,
     objetivo_ventas: float | None = None,
     productos_asignados: Sequence[Producto] | None = None,
-    password_hash: str | None = None,
+    contrasena_hash: str | None = None,
   ):
-    super().__init__(id_persona, nombre, telefono, correo, tipo_usuario="Vendedor", password_hash=password_hash)
+    super().__init__(id_persona, nombre, telefono, correo, tipo_usuario="Vendedor", contrasena_hash=contrasena_hash)
     self.id_vendedor = _limpiar_texto(id_vendedor)
     self.codigo_vendedor = _limpiar_texto(codigo_vendedor) or self.id_vendedor
     self.especialidad = _limpiar_texto(especialidad)
@@ -765,6 +799,7 @@ class Vendedor(Persona):
     total_pagado: float | None = None,
     id_venta: str | None = None,
   ) -> Venta:
+    """Registra la venta de un producto, descontando stock."""
     if cantidad <= 0:
       raise ValueError("La cantidad debe ser mayor que cero.")
     if producto.stock < cantidad:
@@ -797,10 +832,11 @@ class Vendedor(Persona):
 
   def eliminar_producto(self, producto: Producto) -> None:
     if not any(item.id_producto == producto.id_producto for item in self.productos_asignados):
-      raise ValueError("El producto no está asignado a este vendedor.")
+      raise ValueError("El producto no esta asignado a este vendedor.")
     self.quitar_producto(producto)
 
   def generar_informe_financiero(self) -> Informe:
+    """Genera un informe financiero basado en los productos asignados."""
     ingresos_totales = 0.0
     costos_totales = 0.0
     alertas_stock_bajo: list[Producto] = []
@@ -817,6 +853,7 @@ class Vendedor(Persona):
     return Informe(ingresos_totales, costos_totales, margen_ganancia, alertas_stock_bajo)
 
   def checar_inventario(self) -> list[Producto]:
+    """Revisa el inventario en busca de productos con stock bajo o vencidos."""
     productos_con_alerta: list[Producto] = []
     for producto in self.productos_asignados:
       if producto.stock <= 5:
@@ -857,7 +894,7 @@ class Vendedor(Persona):
     codigo_vendedor: str | None = None,
     especialidad: str | None = None,
     objetivo_ventas: float | None = None,
-    password_hash: str | None = None,
+    contrasena_hash: str | None = None,
   ) -> "Vendedor":
     """Construye un Vendedor a partir de una fila de la tabla usuarios
     mas datos opcionales de la tabla vendedores."""
@@ -874,15 +911,13 @@ class Vendedor(Persona):
       codigo_vendedor=codigo_vendedor or id_usuario,
       especialidad=especialidad,
       objetivo_ventas=objetivo_ventas,
-      password_hash=password_hash,
+      contrasena_hash=contrasena_hash,
     )
 
 
 def crear_usuario_desde_fila_usuario(
   fila: Sequence[object],
-  password_hash: str | None = None,
+  contrasena_hash: str | None = None,
 ) -> Persona:
-  return Persona.desde_fila_usuario(fila, password_hash=password_hash)
-
-
-# Se eliminan aliases en inglés para mantener nombres nativos en español
+  """Fabrica una Persona (Cliente o Vendedor) desde una fila de BD."""
+  return Persona.desde_fila_usuario(fila, contrasena_hash=contrasena_hash)

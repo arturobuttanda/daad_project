@@ -70,7 +70,7 @@ log = logging.getLogger("camelcamelcamel")
 
 
 @dataclass
-class ProductStub:
+class ProductoBase:
     asin: str
     nombre: str
     categoria: str = "Sin categoría"
@@ -79,26 +79,26 @@ class ProductStub:
 
 
 @dataclass
-class PricePoint:
+class PuntoPrecio:
     fecha: date
     precio: float
 
 
 @dataclass
-class ScrapeConfig:
-    output: Path
-    limit: int = 100
-    history_start_date: date = date(2024, 1, 1)
-    profile_dir: Path = field(default_factory=lambda: Path(".camelcamel_playwright_profile"))
-    headed: bool = False
-    init_session: bool = False
-    delay_min: float = 2.0
-    delay_max: float = 5.0
-    timeout_ms: int = 120_000
-    use_chart_fallback: bool = True
-    tls_only: bool = False
-    granularity: str = "daily"  # daily | weekly
-    fill_daily_gaps: bool = True
+class ConfigExtraccion:
+    salida: Path
+    limite: int = 100
+    fecha_inicio_historial: date = date(2024, 1, 1)
+    directorio_perfil: Path = field(default_factory=lambda: Path(".camelcamel_playwright_profile"))
+    con_navegador_visible: bool = False
+    iniciar_sesion: bool = False
+    espera_min: float = 2.0
+    espera_max: float = 5.0
+    tiempo_espera_ms: int = 120_000
+    usar_respaldo_grafico: bool = True
+    solo_tls: bool = False
+    granularidad: str = "daily"  # daily | weekly
+    llenar_vacios_diarios: bool = True
 
 
 # ---------------------------------------------------------------------------
@@ -106,8 +106,8 @@ class ScrapeConfig:
 # ---------------------------------------------------------------------------
 
 
-def human_pause(cfg: ScrapeConfig) -> None:
-    time.sleep(random.uniform(cfg.delay_min, cfg.delay_max))
+def pausa_humana(cfg: ConfigExtraccion) -> None:
+    time.sleep(random.uniform(cfg.espera_min, cfg.espera_max))
 
 
 def parsear_precio_us(text: str | None) -> float | None:
@@ -126,9 +126,9 @@ def parsear_fecha_mes(month: str, day: str, year: str) -> date:
     return datetime.strptime(f"{month} {day} {year}", "%b %d %Y").date()
 
 
-def es_challenge_cloudflare(html: str, title: str = "") -> bool:
-    blob = (title + html).lower()
-    return "just a moment" in blob or "cf-chl" in blob or "checking your browser" in blob
+def es_challenge_cloudflare(html: str, titulo: str = "") -> bool:
+    contenido = (titulo + html).lower()
+    return "just a moment" in contenido or "cf-chl" in contenido or "checking your browser" in contenido
 
 
 def _sesion_cffi():
@@ -137,79 +137,79 @@ def _sesion_cffi():
     return cffi_requests
 
 
-def obtener_html_tls(url: str, max_retries: int = 3) -> str:
+def obtener_html_tls(url: str, max_reintentos: int = 3) -> str:
     """HTTP con curl_cffi (impersonate Chrome) con reintentos y backoff exponencial."""
     cffi = _sesion_cffi()
-    backoff_delays = [10, 30, 60]  # segundos de espera entre reintentos
-    last_exc: Exception | None = None
+    esperas_reintento = [10, 30, 60]  # segundos de espera entre reintentos
+    ultima_excepcion: Exception | None = None
 
-    for attempt in range(max_retries + 1):
+    for intento in range(max_reintentos + 1):
         try:
-            resp = cffi.get(url, impersonate="chrome", timeout=60)
-            if resp.status_code == 403:
+            respuesta = cffi.get(url, impersonate="chrome", timeout=60)
+            if respuesta.status_code == 403:
                 raise RuntimeError(f"HTTP 403 Forbidden en {url}")
-            resp.raise_for_status()
-            if es_challenge_cloudflare(resp.text):
+            respuesta.raise_for_status()
+            if es_challenge_cloudflare(respuesta.text):
                 raise RuntimeError(f"Cloudflare activo en {url}")
-            return resp.text
+            return respuesta.text
         except Exception as exc:
-            last_exc = exc
-            if attempt < max_retries:
-                wait = backoff_delays[min(attempt, len(backoff_delays) - 1)]
+            ultima_excepcion = exc
+            if intento < max_reintentos:
+                espera = esperas_reintento[min(intento, len(esperas_reintento) - 1)]
                 log.warning(
                     "Intento %s/%s fallido para %s (%s). Reintentando en %ss...",
-                    attempt + 1, max_retries + 1, url, exc, wait,
+                    intento + 1, max_reintentos + 1, url, exc, espera,
                 )
-                time.sleep(wait)
+                time.sleep(espera)
             else:
                 log.error("Todos los reintentos agotados para %s: %s", url, exc)
 
-    raise last_exc  # type: ignore[misc]
+    raise ultima_excepcion  # type: ignore[misc]
 
 
-def obtener_bytes_tls(url: str, max_retries: int = 3) -> bytes:
+def obtener_bytes_tls(url: str, max_reintentos: int = 3) -> bytes:
     """Descarga binaria con curl_cffi con reintentos y backoff exponencial."""
     cffi = _sesion_cffi()
-    backoff_delays = [10, 30, 60]
-    last_exc: Exception | None = None
+    esperas_reintento = [10, 30, 60]
+    ultima_excepcion: Exception | None = None
 
-    for attempt in range(max_retries + 1):
+    for intento in range(max_reintentos + 1):
         try:
-            resp = cffi.get(url, impersonate="chrome", timeout=60)
-            if resp.status_code == 403:
+            respuesta = cffi.get(url, impersonate="chrome", timeout=60)
+            if respuesta.status_code == 403:
                 raise RuntimeError(f"HTTP 403 Forbidden en {url}")
-            resp.raise_for_status()
-            return resp.content
+            respuesta.raise_for_status()
+            return respuesta.content
         except Exception as exc:
-            last_exc = exc
-            if attempt < max_retries:
-                wait = backoff_delays[min(attempt, len(backoff_delays) - 1)]
+            ultima_excepcion = exc
+            if intento < max_reintentos:
+                espera = esperas_reintento[min(intento, len(esperas_reintento) - 1)]
                 log.warning(
                     "Intento %s/%s fallido (bytes) para %s (%s). Reintentando en %ss...",
-                    attempt + 1, max_retries + 1, url, exc, wait,
+                    intento + 1, max_reintentos + 1, url, exc, espera,
                 )
-                time.sleep(wait)
+                time.sleep(espera)
             else:
                 log.error("Todos los reintentos agotados (bytes) para %s: %s", url, exc)
 
-    raise last_exc  # type: ignore[misc]
+    raise ultima_excepcion  # type: ignore[misc]
 
 
 def obtener_html(
-    context: BrowserContext | None,
-    page: Page | None,
+    contexto: BrowserContext | None,
+    pagina: Page | None,
     url: str,
-    cfg: ScrapeConfig,
+    cfg: ConfigExtraccion,
 ) -> str:
-    """Obtiene HTML: APIRequest de Playwright y, si hace falta, curl_cffi (TLS)."""
-    if cfg.tls_only or context is None:
+    # Obtiene HTML: APIRequest de Playwright y, si hace falta, curl_cffi (TLS)
+    if cfg.solo_tls or contexto is None:
         log.debug("TLS: %s", url)
         return obtener_html_tls(url)
 
     try:
-        resp = context.request.get(url, timeout=min(cfg.timeout_ms, 45_000))
-        if resp.ok and not es_challenge_cloudflare(resp.text()):
-            return resp.text()
+        respuesta = contexto.request.get(url, timeout=min(cfg.tiempo_espera_ms, 45_000))
+        if respuesta.ok and not es_challenge_cloudflare(respuesta.text()):
+            return respuesta.text()
     except Exception as exc:
         log.debug("Playwright request falló para %s: %s", url, exc)
 
@@ -217,16 +217,16 @@ def obtener_html(
     return obtener_html_tls(url)
 
 
-def obtener_bytes(url: str, context: BrowserContext | None, cfg: ScrapeConfig) -> bytes:
-    if cfg.tls_only or context is None:
+def obtener_bytes(url: str, contexto: BrowserContext | None, cfg: ConfigExtraccion) -> bytes:
+    if cfg.solo_tls or contexto is None:
         return obtener_bytes_tls(url)
 
     try:
-        resp = context.request.get(url, timeout=cfg.timeout_ms)
-        if resp.ok:
-            body = resp.body()
-            if len(body) > 500:
-                return body
+        respuesta = contexto.request.get(url, timeout=cfg.tiempo_espera_ms)
+        if respuesta.ok:
+            cuerpo = respuesta.body()
+            if len(cuerpo) > 500:
+                return cuerpo
     except Exception as exc:
         log.debug("Playwright bytes falló para %s: %s", url, exc)
 
@@ -234,11 +234,9 @@ def obtener_bytes(url: str, context: BrowserContext | None, cfg: ScrapeConfig) -
     return obtener_bytes_tls(url)
 
 
-def bootstrap_cloudflare_cookies(context: BrowserContext) -> None:
-    """
-    Obtiene cookies válidas vía TLS fingerprint (curl_cffi) y las inyecta
-    en el contexto Playwright antes de la primera navegación.
-    """
+def inicializar_cookies_cloudflare(contexto: BrowserContext) -> None:
+    # Obtiene cookies válidas vía TLS fingerprint (curl_cffi) y las inyecta
+    # en el contexto Playwright antes de la primera navegación
     try:
         from curl_cffi import requests as cffi_requests
     except ImportError:
@@ -246,7 +244,7 @@ def bootstrap_cloudflare_cookies(context: BrowserContext) -> None:
         return
 
     try:
-        resp = cffi_requests.get(BASE_URL + "/popular", impersonate="chrome", timeout=60)
+        respuesta = cffi_requests.get(BASE_URL + "/popular", impersonate="chrome", timeout=60)
         cookies = [
             {
                 "name": name,
@@ -256,30 +254,30 @@ def bootstrap_cloudflare_cookies(context: BrowserContext) -> None:
                 "secure": True,
                 "httpOnly": name.startswith("cf_") or name == "cf_clearance",
             }
-            for name, value in resp.cookies.items()
+            for name, value in respuesta.cookies.items()
         ]
         if cookies:
-            context.add_cookies(cookies)
+            contexto.add_cookies(cookies)
             log.info("Cookies de sesión inyectadas (%s).", len(cookies))
     except Exception as exc:
         log.warning("No se pudieron obtener cookies de bootstrap: %s", exc)
 
 
-def wait_for_real_page(page: Page, cfg: ScrapeConfig) -> bool:
-    deadline = time.time() + cfg.timeout_ms / 1000
-    while time.time() < deadline:
-        title = page.title()
-        html = page.content()
-        if not es_challenge_cloudflare(html, title):
-            if "camelcamelcamel" in page.url and (
-                "/popular" in page.url
-                or "/top_drops" in page.url
-                or "/product/" in page.url
+def esperar_pagina_real(pagina: Page, cfg: ConfigExtraccion) -> bool:
+    limite_tiempo = time.time() + cfg.tiempo_espera_ms / 1000
+    while time.time() < limite_tiempo:
+        titulo = pagina.title()
+        html = pagina.content()
+        if not es_challenge_cloudflare(html, titulo):
+            if "camelcamelcamel" in pagina.url and (
+                "/popular" in pagina.url
+                or "/top_drops" in pagina.url
+                or "/product/" in pagina.url
                 or "Popular Products" in html
                 or "Top Amazon Price Drops" in html
             ):
                 return True
-        page.wait_for_timeout(2_000)
+        pagina.wait_for_timeout(2_000)
     return False
 
 
@@ -288,9 +286,9 @@ def wait_for_real_page(page: Page, cfg: ScrapeConfig) -> bool:
 # ---------------------------------------------------------------------------
 
 
-def parsear_productos_listado(html: str, source: str) -> list[ProductStub]:
+def parsear_productos_listado(html: str, fuente: str) -> list[ProductoBase]:
     soup = BeautifulSoup(html, "lxml")
-    found: dict[str, ProductStub] = {}
+    encontrados: dict[str, ProductoBase] = {}
 
     for anchor in soup.select("a[href*='/product/']"):
         href = anchor.get("href") or ""
@@ -312,41 +310,41 @@ def parsear_productos_listado(html: str, source: str) -> list[ProductStub]:
             if pm:
                 precio = parsear_precio_us(pm.group(0))
 
-        if asin not in found or len(nombre) > len(found[asin].nombre):
-            found[asin] = ProductStub(
+        if asin not in encontrados or len(nombre) > len(encontrados[asin].nombre):
+            encontrados[asin] = ProductoBase(
                 asin=asin,
                 nombre=nombre,
                 precio_actual=precio,
-                fuente=source,
+                fuente=fuente,
             )
 
-    return list(found.values())
+    return list(encontrados.values())
 
 
 def descubrir_productos(
-    page: Page | None, context: BrowserContext | None, cfg: ScrapeConfig
-) -> list[ProductStub]:
-    collected: dict[str, ProductStub] = {}
-    page_num = 1
+    pagina: Page | None, contexto: BrowserContext | None, cfg: ConfigExtraccion
+) -> list[ProductoBase]:
+    colectados: dict[str, ProductoBase] = {}
+    num_pagina = 1
 
-    while len(collected) < cfg.limit and page_num <= 30:
-        for path_tpl, source in LISTING_PATHS:
-            if len(collected) >= cfg.limit:
+    while len(colectados) < cfg.limite and num_pagina <= 30:
+        for path_tpl, fuente in LISTING_PATHS:
+            if len(colectados) >= cfg.limite:
                 break
-            url = urljoin(BASE_URL, path_tpl.format(page=page_num))
-            log.info("Listado %s (página %s)", source, page_num)
-            html = obtener_html(context, page, url, cfg)
-            human_pause(cfg)
-            for stub in parsear_productos_listado(html, source):
-                if stub.asin not in collected:
-                    collected[stub.asin] = stub
-                if len(collected) >= cfg.limit:
+            url = urljoin(BASE_URL, path_tpl.format(page=num_pagina))
+            log.info("Listado %s (página %s)", fuente, num_pagina)
+            html = obtener_html(contexto, pagina, url, cfg)
+            pausa_humana(cfg)
+            for producto_base in parsear_productos_listado(html, fuente):
+                if producto_base.asin not in colectados:
+                    colectados[producto_base.asin] = producto_base
+                if len(colectados) >= cfg.limite:
                     break
-        page_num += 1
+        num_pagina += 1
 
-    products = list(collected.values())[: cfg.limit]
-    log.info("Productos únicos descubiertos: %s", len(products))
-    return products
+    productos = list(colectados.values())[: cfg.limite]
+    log.info("Productos únicos descubiertos: %s", len(productos))
+    return productos
 
 
 # ---------------------------------------------------------------------------
@@ -355,7 +353,7 @@ def descubrir_productos(
 
 
 def parsear_metadata_producto(html: str, asin: str) -> tuple[str, str, float | None, date | None, float | None, float | None]:
-    """nombre, categoría, precio actual, fecha inicio tracking, min amazon, max amazon."""
+    # nombre, categoría, precio actual, fecha inicio tracking, min amazon, max amazon
     soup = BeautifulSoup(html, "lxml")
 
     h1 = soup.find("h1")
@@ -383,21 +381,21 @@ def parsear_metadata_producto(html: str, asin: str) -> tuple[str, str, float | N
         max_amazon = parsear_precio_us(cells[2])
         break
 
-    tracking_start = None
+    inicio_seguimiento = None
     for p in soup.select("p, div"):
         text = p.get_text(" ", strip=True)
         m = MONITORING_SINCE_RE.search(text)
         if m:
-            tracking_start = parsear_fecha_mes(m.group(1), m.group(2), m.group(3))
+            inicio_seguimiento = parsear_fecha_mes(m.group(1), m.group(2), m.group(3))
             break
 
-    return nombre, categoria, precio_actual, tracking_start, min_amazon, max_amazon
+    return nombre, categoria, precio_actual, inicio_seguimiento, min_amazon, max_amazon
 
 
-def extraer_puntos_tabla_resumen(html: str) -> list[PricePoint]:
-    """Puntos discretos de la tabla resumen (lowest/highest/current)."""
+def extraer_puntos_tabla_resumen(html: str) -> list[PuntoPrecio]:
+    # Puntos discretos de la tabla resumen (lowest/highest/current)
     soup = BeautifulSoup(html, "lxml")
-    points: list[PricePoint] = []
+    puntos: list[PuntoPrecio] = []
 
     for tr in soup.find_all("tr"):
         cells = [c.get_text(" ", strip=True) for c in tr.find_all(["th", "td"])]
@@ -411,39 +409,39 @@ def extraer_puntos_tabla_resumen(html: str) -> list[PricePoint]:
             dm = MONTH_DATE_RE.search(cell)
             if precio is not None and dm:
                 d = parsear_fecha_mes(dm.group(1), dm.group(2), dm.group(3))
-                points.append(PricePoint(d, precio))
-    return points
+                puntos.append(PuntoPrecio(d, precio))
+    return puntos
 
 
-def extraer_puntos_tabla_bruta(html: str) -> list[PricePoint]:
-    """Tabla en bruto bajo la gráfica (si existe): columnas fecha + precio."""
+def extraer_puntos_tabla_bruta(html: str) -> list[PuntoPrecio]:
+    # Tabla en bruto bajo la gráfica (si existe): columnas fecha + precio
     soup = BeautifulSoup(html, "lxml")
-    points: list[PricePoint] = []
+    puntos: list[PuntoPrecio] = []
 
     for table in soup.find_all("table"):
-        rows = table.find_all("tr")
-        if len(rows) < 5:
+        filas = table.find_all("tr")
+        if len(filas) < 5:
             continue
-        header = [c.get_text(" ", strip=True).lower() for c in rows[0].find_all(["th", "td"])]
-        if not header:
+        encabezado = [c.get_text(" ", strip=True).lower() for c in filas[0].find_all(["th", "td"])]
+        if not encabezado:
             continue
-        date_idx = price_idx = None
-        for i, h in enumerate(header):
+        indice_fecha = indice_precio = None
+        for i, h in enumerate(encabezado):
             if any(k in h for k in ("date", "fecha", "time", "day")):
-                date_idx = i
+                indice_fecha = i
             if any(k in h for k in ("price", "precio", "amazon")):
-                price_idx = i
-        if date_idx is None or price_idx is None:
+                indice_precio = i
+        if indice_fecha is None or indice_precio is None:
             continue
 
-        for tr in rows[1:]:
+        for tr in filas[1:]:
             cells = [c.get_text(" ", strip=True) for c in tr.find_all(["th", "td"])]
-            if len(cells) <= max(date_idx, price_idx):
+            if len(cells) <= max(indice_fecha, indice_precio):
                 continue
-            dm = MONTH_DATE_RE.search(cells[date_idx]) or re.search(
-                r"(\d{4}-\d{2}-\d{2})", cells[date_idx]
+            dm = MONTH_DATE_RE.search(cells[indice_fecha]) or re.search(
+                r"(\d{4}-\d{2}-\d{2})", cells[indice_fecha]
             )
-            precio = parsear_precio_us(cells[price_idx])
+            precio = parsear_precio_us(cells[indice_precio])
             if not precio:
                 continue
             if dm:
@@ -451,75 +449,75 @@ def extraer_puntos_tabla_bruta(html: str) -> list[PricePoint]:
                     d = parsear_fecha_mes(dm.group(1), dm.group(2), dm.group(3))
                 else:
                     d = datetime.strptime(dm.group(1), "%Y-%m-%d").date()
-                points.append(PricePoint(d, precio))
+                puntos.append(PuntoPrecio(d, precio))
 
-    return points
+    return puntos
 
 
-def intentar_parsear_payload_red(body: bytes, content_type: str) -> list[PricePoint]:
-    points: list[PricePoint] = []
-    text = body.decode("utf-8", errors="ignore").strip()
+def intentar_parsear_payload_red(cuerpo: bytes, tipo_contenido: str) -> list[PuntoPrecio]:
+    puntos: list[PuntoPrecio] = []
+    text = cuerpo.decode("utf-8", errors="ignore").strip()
     if not text:
-        return points
+        return puntos
 
-    payload: Any = None
-    if "json" in content_type or text.startswith("{") or text.startswith("["):
+    carga_util: Any = None
+    if "json" in tipo_contenido or text.startswith("{") or text.startswith("["):
         try:
-            payload = json.loads(text)
+            carga_util = json.loads(text)
         except json.JSONDecodeError:
-            payload = None
-    elif "csv" in content_type or text.count(",") > 3:
+            carga_util = None
+    elif "csv" in tipo_contenido or text.count(",") > 3:
         return parsear_puntos_csv(text)
 
-    if payload is None:
-        # series Flot: [[ts_ms, price], ...]
+    if carga_util is None:
+        # series Flot: [[ts_ms, precio], ...]
         flot = re.findall(r"\[\s*(\d{9,13})\s*,\s*([\d.]+)\s*\]", text)
-        for ts, price in flot:
+        for ts, precio in flot:
             d = datetime.fromtimestamp(int(ts) / 1000, tz=timezone.utc).date()
-            points.append(PricePoint(d, float(price)))
-        return points
+            puntos.append(PuntoPrecio(d, float(precio)))
+        return puntos
 
-    def walk(node: Any) -> None:
-        if isinstance(node, list):
-            if len(node) >= 2 and isinstance(node[0], (int, float)) and isinstance(node[1], (int, float)):
-                ts, val = node[0], node[1]
+    def walk(nodo: Any) -> None:
+        if isinstance(nodo, list):
+            if len(nodo) >= 2 and isinstance(nodo[0], (int, float)) and isinstance(nodo[1], (int, float)):
+                ts, valor = nodo[0], nodo[1]
                 if ts > 1_000_000_000_000:
                     ts /= 1000
-                if 10 < val < 1_000_000:
-                    points.append(
-                        PricePoint(
+                if 10 < valor < 1_000_000:
+                    puntos.append(
+                        PuntoPrecio(
                             datetime.fromtimestamp(int(ts), tz=timezone.utc).date(),
-                            float(val),
+                            float(valor),
                         )
                     )
                 return
-            for item in node:
+            for item in nodo:
                 walk(item)
-        elif isinstance(node, dict):
-            for v in node.values():
+        elif isinstance(nodo, dict):
+            for v in nodo.values():
                 walk(v)
 
-    walk(payload)
-    return points
+    walk(carga_util)
+    return puntos
 
 
-def parsear_puntos_csv(text: str) -> list[PricePoint]:
-    points: list[PricePoint] = []
-    for line in text.splitlines():
-        if not line.strip() or line.lower().startswith("date"):
+def parsear_puntos_csv(text: str) -> list[PuntoPrecio]:
+    puntos: list[PuntoPrecio] = []
+    for linea in text.splitlines():
+        if not linea.strip() or linea.lower().startswith("date"):
             continue
-        parts = [p.strip() for p in re.split(r"[,;\t]", line) if p.strip()]
-        if len(parts) < 2:
+        partes = [p.strip() for p in re.split(r"[,;\t]", linea) if p.strip()]
+        if len(partes) < 2:
             continue
-        precio = parsear_precio_us(parts[-1])
-        dm = MONTH_DATE_RE.search(line) or re.search(r"(\d{4}-\d{2}-\d{2})", line)
+        precio = parsear_precio_us(partes[-1])
+        dm = MONTH_DATE_RE.search(linea) or re.search(r"(\d{4}-\d{2}-\d{2})", linea)
         if precio and dm:
             if dm.lastindex == 3:
                 d = parsear_fecha_mes(dm.group(1), dm.group(2), dm.group(3))
             else:
                 d = datetime.strptime(dm.group(1), "%Y-%m-%d").date()
-            points.append(PricePoint(d, precio))
-    return points
+            puntos.append(PuntoPrecio(d, precio))
+    return puntos
 
 
 def construir_url_grafico_png(
@@ -542,8 +540,8 @@ def construir_url_grafico_png(
     return f"{CHARTS_BASE}/us/{asin}/amazon.png?{params}"
 
 
-def _chart_line_mask(arr: np.ndarray) -> np.ndarray | None:
-    """Máscara de píxeles de la línea de precio Amazon en el PNG del chart."""
+def _mascara_linea_grafico(arr: np.ndarray) -> np.ndarray | None:
+    # Máscara de píxeles de la línea de precio Amazon en el PNG del chart
     for rgb in CHART_AMAZON_COLORS:
         mask = (
             (np.abs(arr[:, :, 0].astype(int) - rgb[0]) <= CHART_COLOR_TOLERANCE)
@@ -555,45 +553,43 @@ def _chart_line_mask(arr: np.ndarray) -> np.ndarray | None:
     return None
 
 
-def _y_to_price(y: float, y_min: float, y_max: float, min_price: float, max_price: float) -> float:
-    price_span = max(max_price - min_price, 0.01)
-    return max_price - (y - y_min) / max(y_max - y_min, 1) * price_span
+def _y_a_precio(y: float, y_min: float, y_max: float, min_precio: float, max_precio: float) -> float:
+    rango_precio = max(max_precio - min_precio, 0.01)
+    return max_precio - (y - y_min) / max(y_max - y_min, 1) * rango_precio
 
 
 def sanear_serie_precios(
-    points: list[PricePoint],
-    min_price: float | None,
-    max_price: float | None,
+    puntos: list[PuntoPrecio],
+    min_precio: float | None,
+    max_precio: float | None,
     *,
     margin: float = 0.12,
-) -> list[PricePoint]:
-    """Elimina valores fuera del rango Amazon declarado en la ficha del producto."""
-    if not points or min_price is None or max_price is None:
-        return points
-    lo = min_price * (1 - margin)
-    hi = max_price * (1 + margin)
-    cleaned = [p for p in points if lo <= p.precio <= hi]
-    return cleaned if len(cleaned) >= 10 else points
+) -> list[PuntoPrecio]:
+    # Elimina valores fuera del rango Amazon declarado en la ficha del producto
+    if not puntos or min_precio is None or max_precio is None:
+        return puntos
+    lo = min_precio * (1 - margin)
+    hi = max_precio * (1 + margin)
+    limpios = [p for p in puntos if lo <= p.precio <= hi]
+    return limpios if len(limpios) >= 10 else puntos
 
 
 def extraer_puntos_grafico_png(
     png_bytes: bytes,
     *,
-    start: date,
-    end: date,
-    min_price: float,
-    max_price: float,
-) -> list[PricePoint]:
-    """
-    Traza la línea Amazon del PNG (charts.camelcamelcamel.com).
-    Por columna X elige el tramo coherente con el precio del día anterior (evita saltos
-    por leyenda/rejilla). Un punto por día calendario en el eje temporal del gráfico.
-    """
+    inicio: date,
+    fin: date,
+    min_precio: float,
+    max_precio: float,
+) -> list[PuntoPrecio]:
+    # Traza la línea Amazon del PNG (charts.camelcamelcamel.com).
+    # Por columna X elige el tramo coherente con el precio del día anterior (evita saltos
+    # por leyenda/rejilla). Un punto por día calendario en el eje temporal del gráfico
     img = Image.open(BytesIO(png_bytes)).convert("RGB")
     arr = np.array(img)
     h, w, _ = arr.shape
 
-    mask = _chart_line_mask(arr)
+    mask = _mascara_linea_grafico(arr)
     if mask is None:
         return []
 
@@ -609,131 +605,129 @@ def extraer_puntos_grafico_png(
     all_ys = [y for ys in columns.values() for y in ys]
     y_min, y_max = float(min(all_ys)), float(max(all_ys))
     x_min, x_max = min(columns), max(columns)
-    total_days = max((end - start).days, 1)
+    total_days = max((fin - inicio).days, 1)
 
-    by_date: dict[date, float] = {}
-    prev_price: float | None = None
+    por_fecha: dict[date, float] = {}
+    prev_precio: float | None = None
 
     for x in sorted(columns):
         day_offset = (x - x_min) / max(x_max - x_min, 1) * total_days
-        d = start + timedelta(days=int(day_offset))
-        candidates = [
-            _y_to_price(float(y), y_min, y_max, min_price, max_price) for y in columns[x]
+        d = inicio + timedelta(days=int(day_offset))
+        candidatos = [
+            _y_a_precio(float(y), y_min, y_max, min_precio, max_precio) for y in columns[x]
         ]
-        if prev_price is None:
-            price = float(np.median(candidates))
+        if prev_precio is None:
+            precio = float(np.median(candidatos))
         else:
-            price = min(candidates, key=lambda p: abs(p - prev_price))
-        prev_price = price
-        by_date[d] = round(price, 2)
+            precio = min(candidatos, key=lambda p: abs(p - prev_precio))
+        prev_precio = precio
+        por_fecha[d] = round(precio, 2)
 
-    return [PricePoint(d, p) for d, p in sorted(by_date.items())]
+    return [PuntoPrecio(d, p) for d, p in sorted(por_fecha.items())]
 
 
-def unir_puntos(*series: list[PricePoint]) -> list[PricePoint]:
-    merged: dict[date, float] = {}
+def unir_puntos(*series: list[PuntoPrecio]) -> list[PuntoPrecio]:
+    combinados: dict[date, float] = {}
     for seq in series:
         for pt in seq:
-            merged[pt.fecha] = pt.precio
-    return [PricePoint(d, p) for d, p in sorted(merged.items())]
+            combinados[pt.fecha] = pt.precio
+    return [PuntoPrecio(d, p) for d, p in sorted(combinados.items())]
 
 
-def filtrar_ventana_historial(points: list[PricePoint], start_date: date) -> list[PricePoint]:
-    if not points:
+def filtrar_ventana_historial(puntos: list[PuntoPrecio], fecha_inicio: date) -> list[PuntoPrecio]:
+    if not puntos:
         return []
-    filtered = [p for p in points if p.fecha >= start_date]
-    return filtered if filtered else sorted(points, key=lambda p: p.fecha)
+    filtrados = [p for p in puntos if p.fecha >= fecha_inicio]
+    return filtrados if filtrados else sorted(puntos, key=lambda p: p.fecha)
 
 
 def formatear_historial_diario(
-    points: list[PricePoint],
-    start_date: date,
+    puntos: list[PuntoPrecio],
+    fecha_inicio: date,
     *,
-    fill_gaps: bool = True,
+    llenar_vacios: bool = True,
 ) -> list[dict[str, Any]]:
-    """
-    Serie diaria. Camelcamelcamel registra cambios de precio (escalones);
-    con fill_gaps=True propaga el último precio conocido a cada día calendario.
-    """
-    filtered = filtrar_ventana_historial(points, start_date)
-    if not filtered:
+    # Serie diaria. Camelcamelcamel registra cambios de precio (escalones);
+    # con llenar_vacios=True propaga el último precio conocido a cada día calendario
+    filtrados = filtrar_ventana_historial(puntos, fecha_inicio)
+    if not filtrados:
         return []
 
-    by_date: dict[date, float] = {}
-    for pt in filtered:
-        by_date[pt.fecha] = pt.precio
+    por_fecha: dict[date, float] = {}
+    for pt in filtrados:
+        por_fecha[pt.fecha] = pt.precio
 
-    if not fill_gaps:
+    if not llenar_vacios:
         return [
             {"fecha": d.isoformat(), "precio_registrado": round(p, 2)}
-            for d, p in sorted(by_date.items())
+            for d, p in sorted(por_fecha.items())
         ]
 
-    start = min(by_date)
-    end = min(max(by_date), date.today())
-    out: list[dict[str, Any]] = []
-    last: float | None = None
-    d = start
-    while d <= end:
-        if d in by_date:
-            last = by_date[d]
-        if last is not None:
-            out.append({"fecha": d.isoformat(), "precio_registrado": round(last, 2)})
+    inicio = min(por_fecha)
+    fin = min(max(por_fecha), date.today())
+    salida: list[dict[str, Any]] = []
+    ultimo: float | None = None
+    d = inicio
+    while d <= fin:
+        if d in por_fecha:
+            ultimo = por_fecha[d]
+        if ultimo is not None:
+            salida.append({"fecha": d.isoformat(), "precio_registrado": round(ultimo, 2)})
         d += timedelta(days=1)
-    return out
+    return salida
 
 
-def remuestrear_semanal(points: list[PricePoint], start_date: date) -> list[dict[str, Any]]:
-    filtered = filtrar_ventana_historial(points, start_date)
-    if not filtered:
+def remuestrear_semanal(puntos: list[PuntoPrecio], fecha_inicio: date) -> list[dict[str, Any]]:
+    filtrados = filtrar_ventana_historial(puntos, fecha_inicio)
+    if not filtrados:
         return []
 
-    buckets: dict[tuple[int, int], list[PricePoint]] = defaultdict(list)
-    for pt in filtered:
+    grupos: dict[tuple[int, int], list[PuntoPrecio]] = defaultdict(list)
+    for pt in filtrados:
         iso = pt.fecha.isocalendar()
-        buckets[(iso.year, iso.week)].append(pt)
+        grupos[(iso.year, iso.week)].append(pt)
 
-    weekly: list[dict[str, Any]] = []
-    for key in sorted(buckets):
-        bucket = buckets[key]
-        chosen = max(bucket, key=lambda p: p.fecha)
-        weekly.append(
+    semanal: list[dict[str, Any]] = []
+    for key in sorted(grupos):
+        bucket = grupos[key]
+        elegido = max(bucket, key=lambda p: p.fecha)
+        semanal.append(
             {
-                "fecha": chosen.fecha.isoformat(),
-                "precio_registrado": round(chosen.precio, 2),
+                "fecha": elegido.fecha.isoformat(),
+                "precio_registrado": round(elegido.precio, 2),
             }
         )
-    return weekly
+    return semanal
 
 
-def formatear_historial(points: list[PricePoint], cfg: ScrapeConfig) -> list[dict[str, Any]]:
-    if cfg.granularity == "weekly":
-        return remuestrear_semanal(points, cfg.history_start_date)
+def formatear_historial(puntos: list[PuntoPrecio], cfg: ConfigExtraccion) -> list[dict[str, Any]]:
+    if cfg.granularidad == "weekly":
+        return remuestrear_semanal(puntos, cfg.fecha_inicio_historial)
     return formatear_historial_diario(
-        points,
-        cfg.history_start_date,
-        fill_gaps=cfg.fill_daily_gaps,
+        puntos,
+        cfg.fecha_inicio_historial,
+        llenar_vacios=cfg.llenar_vacios_diarios,
     )
 
 
 def obtener_historial_precios(
-    page: Page | None,
-    context: BrowserContext | None,
-    product: ProductStub,
-    cfg: ScrapeConfig,
+    pagina: Page | None,
+    contexto: BrowserContext | None,
+    producto: ProductoBase,
+    cfg: ConfigExtraccion,
 ) -> tuple[list[dict[str, Any]], date | None]:
-    captured: list[tuple[bytes, str]] = []
+    capturados: list[tuple[bytes, str]] = []
     capture_active = {"on": True}
 
-    product_url = (
-        f"{BASE_URL}/product/{product.asin}"
+    url_producto = (
+        f"{BASE_URL}/product/{producto.asin}"
         "?active=price_amazon&context=price_history&tp=all"
     )
-    log.info("Producto %s — historial", product.asin)
+    log.info("Producto %s — historial", producto.asin)
 
-    if page is not None and not cfg.tls_only:
+    if pagina is not None and not cfg.solo_tls:
 
-        def on_response(response: Response) -> None:
+        def al_recibir_respuesta(response: Response) -> None:
             if not capture_active["on"]:
                 return
             try:
@@ -753,93 +747,93 @@ def obtener_historial_precios(
                     )
                 ):
                     return
-                body = response.body()
-                if len(body) < 30 or len(body) > 8_000_000:
+                cuerpo = response.body()
+                if len(cuerpo) < 30 or len(cuerpo) > 8_000_000:
                     return
                 ct = (response.headers.get("content-type") or "").lower()
                 if any(t in ct for t in ("json", "csv", "javascript", "text")) or url.endswith(
                     (".json", ".csv", ".js")
                 ):
-                    captured.append((body, ct))
+                    capturados.append((cuerpo, ct))
             except Exception:
                 pass
 
-        page.on("response", on_response)
+        pagina.on("response", al_recibir_respuesta)
         try:
-            page.goto(product_url, wait_until="domcontentloaded", timeout=cfg.timeout_ms)
-            page.wait_for_timeout(2_000)
+            pagina.goto(url_producto, wait_until="domcontentloaded", timeout=cfg.tiempo_espera_ms)
+            pagina.wait_for_timeout(2_000)
         except Exception as exc:
-            log.debug("goto producto %s: %s", product.asin, exc)
+            log.debug("goto producto %s: %s", producto.asin, exc)
 
-    human_pause(cfg)
-    html = obtener_html(context, page, product_url, cfg)
+    pausa_humana(cfg)
+    html = obtener_html(contexto, pagina, url_producto, cfg)
 
-    nombre, categoria, precio_tabla, tracking_start, min_p, max_p = parsear_metadata_producto(
-        html, product.asin
+    nombre, categoria, precio_tabla, inicio_seguimiento, min_p, max_p = parsear_metadata_producto(
+        html, producto.asin
     )
-    product.nombre = nombre or product.nombre
-    product.categoria = categoria
+    producto.nombre = nombre or producto.nombre
+    producto.categoria = categoria
     if precio_tabla is not None:
-        product.precio_actual = precio_tabla
+        producto.precio_actual = precio_tabla
 
-    network_pts: list[PricePoint] = []
-    for body, ct in captured:
-        network_pts.extend(intentar_parsear_payload_red(body, ct))
+    puntos_red: list[PuntoPrecio] = []
+    for cuerpo, ct in capturados:
+        puntos_red.extend(intentar_parsear_payload_red(cuerpo, ct))
 
-    table_pts = extraer_puntos_tabla_bruta(html)
-    summary_pts = extraer_puntos_tabla_resumen(html)
-    all_pts = unir_puntos(network_pts, table_pts, summary_pts)
+    puntos_tabla = extraer_puntos_tabla_bruta(html)
+    puntos_resumen = extraer_puntos_tabla_resumen(html)
+    todos_puntos = unir_puntos(puntos_red, puntos_tabla, puntos_resumen)
 
     # Serie densa desde PNG Amazon (única fuente con granularidad diaria en camelcamelcamel)
-    if cfg.use_chart_fallback:
-        bounds_min, bounds_max = min_p, max_p
-        if bounds_min is None or bounds_max is None:
-            prices = [p.precio for p in all_pts]
-            if prices:
-                bounds_min, bounds_max = min(prices), max(prices)
+    if cfg.usar_respaldo_grafico:
+        limite_min, limite_max = min_p, max_p
+        if limite_min is None or limite_max is None:
+            precios = [p.precio for p in todos_puntos]
+            if precios:
+                limite_min, limite_max = min(precios), max(precios)
             else:
-                bounds_min, bounds_max = 1.0, 100.0
-        start = tracking_start or (
-            all_pts[0].fecha if all_pts else date.today() - timedelta(days=365 * 3)
+                limite_min, limite_max = 1.0, 100.0
+        inicio = inicio_seguimiento or (
+            todos_puntos[0].fecha if todos_puntos else date.today() - timedelta(days=365 * 3)
         )
-        end = date.today()
-        chart_url = construir_url_grafico_png(product.asin)
+        fin = date.today()
+        url_grafico = construir_url_grafico_png(producto.asin)
         try:
-            png_bytes = obtener_bytes(chart_url, context, cfg)
-            chart_pts = extraer_puntos_grafico_png(
+            png_bytes = obtener_bytes(url_grafico, contexto, cfg)
+            puntos_grafico = extraer_puntos_grafico_png(
                 png_bytes,
-                start=start,
-                end=end,
-                min_price=bounds_min,
-                max_price=bounds_max,
+                inicio=inicio,
+                fin=fin,
+                min_precio=limite_min,
+                max_precio=limite_max,
             )
-            chart_pts = sanear_serie_precios(chart_pts, min_p, max_p)
-            if chart_pts:
+            puntos_grafico = sanear_serie_precios(puntos_grafico, min_p, max_p)
+            if puntos_grafico:
                 log.info(
                     "%s: %s puntos desde chart Amazon (tracking desde %s).",
-                    product.asin,
-                    len(chart_pts),
-                    start.isoformat(),
+                    producto.asin,
+                    len(puntos_grafico),
+                    inicio.isoformat(),
                 )
-                if len(chart_pts) >= len(all_pts):
-                    all_pts = chart_pts
+                if len(puntos_grafico) >= len(todos_puntos):
+                    todos_puntos = puntos_grafico
                 else:
-                    all_pts = unir_puntos(all_pts, chart_pts)
+                    todos_puntos = unir_puntos(todos_puntos, puntos_grafico)
         except Exception as exc:
-            log.warning("%s: fallo al descargar chart PNG: %s", product.asin, exc)
+            log.warning("%s: fallo al descargar chart PNG: %s", producto.asin, exc)
 
-    all_pts = sanear_serie_precios(all_pts, min_p, max_p)
+    todos_puntos = sanear_serie_precios(todos_puntos, min_p, max_p)
     capture_active["on"] = False
 
-    earliest = min((p.fecha for p in all_pts), default=None)
-    historial = formatear_historial(all_pts, cfg)
+    mas_temprano = min((p.fecha for p in todos_puntos), default=None)
+    historial = formatear_historial(todos_puntos, cfg)
     log.info(
         "%s: historial %s → %s registros.",
-        product.asin,
-        cfg.granularity,
+        producto.asin,
+        cfg.granularidad,
         len(historial),
     )
-    return historial, earliest
+    return historial, mas_temprano
 
 
 # ---------------------------------------------------------------------------
@@ -858,61 +852,61 @@ O ejecute sin navegador (solo curl_cffi, suficiente para este scraper):
 """
 
 
-def guardar_incremental(productos: list[dict[str, Any]], output: Path) -> None:
-    """Guardado incremental para no perder progreso si el scraper falla."""
-    partial_path = output.with_suffix(".partial.json")
+def guardar_incremental(productos: list[dict[str, Any]], salida: Path) -> None:
+    # Guardado incremental para no perder progreso si el scraper falla
+    partial_path = salida.with_suffix(".partial.json")
     with partial_path.open("w", encoding="utf-8") as fh:
         json.dump({"productos": productos}, fh, ensure_ascii=False, indent=2)
     log.info("Guardado incremental: %s productos en %s", len(productos), partial_path)
 
 
-def ejecutar_scraper_solo_tls(cfg: ScrapeConfig) -> dict[str, Any]:
-    """Modo sin Chromium: útil en WSL si falta libnspr4/libnss3."""
-    if cfg.init_session:
+def ejecutar_scraper_solo_tls(cfg: ConfigExtraccion) -> dict[str, Any]:
+    # Modo sin Chromium: útil en WSL si falta libnspr4/libnss3
+    if cfg.iniciar_sesion:
         raise RuntimeError("--init-session requiere navegador; omita --tls-only.")
 
     log.info("Modo --tls-only (sin Chromium / Playwright browser)")
-    cfg.tls_only = True
+    cfg.solo_tls = True
     productos: list[dict[str, Any]] = []
-    skipped: list[str] = []
+    saltados: list[str] = []
 
-    stubs = descubrir_productos(None, None, cfg)
-    for idx, stub in enumerate(stubs, start=1):
-        log.info("[%s/%s] Procesando %s", idx, len(stubs), stub.asin)
+    productos_base = descubrir_productos(None, None, cfg)
+    for indice, producto_base in enumerate(productos_base, start=1):
+        log.info("[%s/%s] Procesando %s", indice, len(productos_base), producto_base.asin)
         try:
-            historial, earliest = obtener_historial_precios(None, None, stub, cfg)
+            historial, mas_temprano = obtener_historial_precios(None, None, producto_base, cfg)
         except Exception as exc:
             log.error(
                 "[%s/%s] SALTANDO producto %s por error irrecuperable: %s",
-                idx, len(stubs), stub.asin, exc,
+                indice, len(productos_base), producto_base.asin, exc,
             )
-            skipped.append(stub.asin)
+            saltados.append(producto_base.asin)
             # Pausa larga tras un bloqueo para enfriar el rate-limit
-            cooldown = random.uniform(30, 60)
-            log.info("Cooldown de %.0fs antes del siguiente producto...", cooldown)
-            time.sleep(cooldown)
+            enfriamiento = random.uniform(30, 60)
+            log.info("Cooldown de %.0fs antes del siguiente producto...", enfriamiento)
+            time.sleep(enfriamiento)
             continue
 
-        if earliest and earliest > cfg.history_start_date:
+        if mas_temprano and mas_temprano > cfg.fecha_inicio_historial:
             print(
-                f"ALERTA: El producto {stub.asin} ({stub.nombre[:50]}...) "
-                f"solo tiene historial desde {earliest.isoformat()} "
-                f"(deseado desde {cfg.history_start_date.isoformat()}). "
-                f"Se exportan {len(historial)} registros {cfg.granularity} disponibles.",
+                f"ALERTA: El producto {producto_base.asin} ({producto_base.nombre[:50]}...) "
+                f"solo tiene historial desde {mas_temprano.isoformat()} "
+                f"(deseado desde {cfg.fecha_inicio_historial.isoformat()}). "
+                f"Se exportan {len(historial)} registros {cfg.granularidad} disponibles.",
                 file=sys.stderr,
             )
         elif not historial:
-            print(f"ALERTA: Sin historial de precios para {stub.asin}.", file=sys.stderr)
+            print(f"ALERTA: Sin historial de precios para {producto_base.asin}.", file=sys.stderr)
 
-        precio_actual = stub.precio_actual
+        precio_actual = producto_base.precio_actual
         if precio_actual is None and historial:
             precio_actual = historial[-1]["precio_registrado"]
 
         productos.append(
             {
-                "id_producto": stub.asin,
-                "nombre": stub.nombre,
-                "categoria": stub.categoria,
+                "id_producto": producto_base.asin,
+                "nombre": producto_base.nombre,
+                "categoria": producto_base.categoria,
                 "precio_actual": round(float(precio_actual), 2)
                 if precio_actual is not None
                 else 0.0,
@@ -922,87 +916,87 @@ def ejecutar_scraper_solo_tls(cfg: ScrapeConfig) -> dict[str, Any]:
 
         # Guardado incremental cada 10 productos
         if len(productos) % 10 == 0:
-            guardar_incremental(productos, cfg.output)
+            guardar_incremental(productos, cfg.salida)
 
-        human_pause(cfg)
+        pausa_humana(cfg)
 
-    if skipped:
+    if saltados:
         log.warning(
-            "Productos saltados por errores (%s): %s", len(skipped), ", ".join(skipped)
+            "Productos saltados por errores (%s): %s", len(saltados), ", ".join(saltados)
         )
 
     return {"productos": productos}
 
 
-def ejecutar_scraper(cfg: ScrapeConfig) -> dict[str, Any]:
-    if cfg.tls_only:
+def ejecutar_scraper(cfg: ConfigExtraccion) -> dict[str, Any]:
+    if cfg.solo_tls:
         return ejecutar_scraper_solo_tls(cfg)
-    cfg.profile_dir.mkdir(parents=True, exist_ok=True)
+    cfg.directorio_perfil.mkdir(parents=True, exist_ok=True)
 
     productos: list[dict[str, Any]] = []
 
     with sync_playwright() as playwright:
-        context = playwright.chromium.launch_persistent_context(
-            user_data_dir=str(cfg.profile_dir.resolve()),
-            headless=not (cfg.headed or cfg.init_session),
+        contexto = playwright.chromium.launch_persistent_context(
+            user_data_dir=str(cfg.directorio_perfil.resolve()),
+            headless=not (cfg.con_navegador_visible or cfg.iniciar_sesion),
             args=["--disable-blink-features=AutomationControlled"],
             viewport={"width": 1366, "height": 900},
             user_agent=USER_AGENT,
             locale="en-US",
         )
-        context.add_init_script(
+        contexto.add_init_script(
             "Object.defineProperty(navigator, 'webdriver', {get: () => undefined});"
         )
-        page = context.pages[0] if context.pages else context.new_page()
-        bootstrap_cloudflare_cookies(context)
+        pagina = contexto.pages[0] if contexto.pages else contexto.new_page()
+        inicializar_cookies_cloudflare(contexto)
 
-        if cfg.init_session:
+        if cfg.iniciar_sesion:
             log.info("Modo init-session: abra la ventana y complete Cloudflare si aparece.")
-            page.goto(f"{BASE_URL}/popular", wait_until="domcontentloaded", timeout=cfg.timeout_ms)
-            wait_for_real_page(page, cfg)
+            pagina.goto(f"{BASE_URL}/popular", wait_until="domcontentloaded", timeout=cfg.tiempo_espera_ms)
+            esperar_pagina_real(pagina, cfg)
             log.info("Sesión inicializada. Vuelva a ejecutar sin --init-session.")
-            if cfg.headed or cfg.init_session:
-                context.close()
+            if cfg.con_navegador_visible or cfg.iniciar_sesion:
+                contexto.close()
                 return {"productos": []}
 
-        stubs = descubrir_productos(page, context, cfg)
+        productos_base = descubrir_productos(pagina, contexto, cfg)
 
-        for idx, stub in enumerate(stubs, start=1):
-            log.info("[%s/%s] Procesando %s", idx, len(stubs), stub.asin)
-            historial, earliest = obtener_historial_precios(page, context, stub, cfg)
+        for indice, producto_base in enumerate(productos_base, start=1):
+            log.info("[%s/%s] Procesando %s", indice, len(productos_base), producto_base.asin)
+            historial, mas_temprano = obtener_historial_precios(pagina, contexto, producto_base, cfg)
 
-            if earliest and earliest > cfg.history_start_date:
+            if mas_temprano and mas_temprano > cfg.fecha_inicio_historial:
                 print(
-                    f"ALERTA: El producto {stub.asin} ({stub.nombre[:50]}...) "
-                    f"solo tiene historial desde {earliest.isoformat()} "
-                    f"(deseado desde {cfg.history_start_date.isoformat()}). "
-                    f"Se exportan {len(historial)} registros {cfg.granularity} disponibles.",
+                    f"ALERTA: El producto {producto_base.asin} ({producto_base.nombre[:50]}...) "
+                    f"solo tiene historial desde {mas_temprano.isoformat()} "
+                    f"(deseado desde {cfg.fecha_inicio_historial.isoformat()}). "
+                    f"Se exportan {len(historial)} registros {cfg.granularidad} disponibles.",
                     file=sys.stderr,
                 )
             elif not historial:
                 print(
-                    f"ALERTA: Sin historial de precios para {stub.asin}.",
+                    f"ALERTA: Sin historial de precios para {producto_base.asin}.",
                     file=sys.stderr,
                 )
 
-            precio_actual = stub.precio_actual
+            precio_actual = producto_base.precio_actual
             if precio_actual is None and historial:
                 precio_actual = historial[-1]["precio_registrado"]
 
             productos.append(
                 {
-                    "id_producto": stub.asin,
-                    "nombre": stub.nombre,
-                    "categoria": stub.categoria,
+                    "id_producto": producto_base.asin,
+                    "nombre": producto_base.nombre,
+                    "categoria": producto_base.categoria,
                     "precio_actual": round(float(precio_actual), 2)
                     if precio_actual is not None
                     else 0.0,
                     "historial_precios": historial,
                 }
             )
-            human_pause(cfg)
+            pausa_humana(cfg)
 
-        context.close()
+        contexto.close()
 
     return {"productos": productos}
 
@@ -1085,33 +1079,33 @@ def construir_parser() -> argparse.ArgumentParser:
 
 def main() -> int:
     parser = construir_parser()
-    args = parser.parse_args()
+    argumentos = parser.parse_args()
 
     logging.basicConfig(
-        level=logging.DEBUG if args.verbose else logging.INFO,
+        level=logging.DEBUG if argumentos.verbose else logging.INFO,
         format="%(asctime)s %(levelname)s %(message)s",
     )
 
-    cfg = ScrapeConfig(
-        output=args.output,
-        limit=args.limit,
-        profile_dir=args.profile_dir,
-        headed=args.headed,
-        init_session=args.init_session,
-        delay_min=args.delay_min,
-        delay_max=args.delay_max,
-        use_chart_fallback=not args.no_chart_fallback,
-        tls_only=args.tls_only,
-        granularity=args.granularity,
-        fill_daily_gaps=not args.no_fill_daily_gaps,
-        history_start_date=args.start_date if args.start_date is not None else date(2024, 1, 1),
+    cfg = ConfigExtraccion(
+        salida=argumentos.output,
+        limite=argumentos.limit,
+        directorio_perfil=argumentos.profile_dir,
+        con_navegador_visible=argumentos.headed,
+        iniciar_sesion=argumentos.init_session,
+        espera_min=argumentos.delay_min,
+        espera_max=argumentos.delay_max,
+        usar_respaldo_grafico=not argumentos.no_chart_fallback,
+        solo_tls=argumentos.tls_only,
+        granularidad=argumentos.granularity,
+        llenar_vacios_diarios=not argumentos.no_fill_daily_gaps,
+        fecha_inicio_historial=argumentos.start_date if argumentos.start_date is not None else date(2024, 1, 1),
     )
 
-    if cfg.delay_max < cfg.delay_min:
+    if cfg.espera_max < cfg.espera_min:
         parser.error("--delay-max debe ser >= --delay-min")
 
     try:
-        result = ejecutar_scraper(cfg)
+        resultado = ejecutar_scraper(cfg)
     except Exception as exc:
         err = f"{type(exc).__name__} {exc}".lower()
         if any(
@@ -1121,14 +1115,14 @@ def main() -> int:
             print(LINUX_BROWSER_DEPS_HINT, file=sys.stderr)
         raise
 
-    if cfg.init_session and not result["productos"]:
+    if cfg.iniciar_sesion and not resultado["productos"]:
         return 0
 
-    cfg.output.parent.mkdir(parents=True, exist_ok=True)
-    with cfg.output.open("w", encoding="utf-8") as fh:
-        json.dump(result, fh, ensure_ascii=False, indent=2)
+    cfg.salida.parent.mkdir(parents=True, exist_ok=True)
+    with cfg.salida.open("w", encoding="utf-8") as fh:
+        json.dump(resultado, fh, ensure_ascii=False, indent=2)
 
-    log.info("JSON guardado en %s (%s productos)", cfg.output.resolve(), len(result["productos"]))
+    log.info("JSON guardado en %s (%s productos)", cfg.salida.resolve(), len(resultado["productos"]))
     return 0
 
 

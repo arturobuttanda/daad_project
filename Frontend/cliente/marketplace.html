@@ -1,0 +1,342 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Marketplace - NexusMarket</title>
+  <link rel="stylesheet" href="../css/estilo.css" />
+</head>
+<body>
+  <div class="contenedor-layout">
+    <!-- SIDEBAR -->
+    <aside class="sidebar" id="sidebar">
+      <div style="padding:0 1.25rem 1rem; border-bottom:1px solid var(--borde-suave); margin-bottom:0.5rem;">
+        <div class="logo" style="font-size:1rem;">Nexus<span>Market</span></div>
+      </div>
+      <ul class="sidebar-nav">
+        <li><a href="marketplace.html" class="activo">
+          <svg class="icono" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="9" cy="21" r="1"/><circle cx="20" cy="21" r="1"/><path d="M1 1h4l2.68 13.39a2 2 0 0 0 2 1.61h9.72a2 2 0 0 0 2-1.61L23 6H6"/></svg>
+          <span class="texto-nav">Marketplace</span>
+        </a></li>
+        <li><a href="historial.html">
+          <svg class="icono" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg>
+          <span class="texto-nav">Pedidos</span>
+        </a></li>
+      </ul>
+      <div style="padding:1rem 1.25rem; margin-top:auto;">
+        <button class="btn btn-sm btn-block" style="border:1px solid var(--error); color:var(--error);" onclick="cerrarSesionNav()">Cerrar sesion</button>
+      </div>
+    </aside>
+
+    <!-- CONTENIDO -->
+    <main class="contenido-principal">
+      <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:1.5rem; flex-wrap:wrap; gap:0.75rem;">
+        <div>
+          <small style="color:var(--texto-suave); text-transform:uppercase; font-weight:600; letter-spacing:0.05em;">Marketplace</small>
+          <h1 style="font-size:1.5rem; font-weight:700; color:var(--texto);">Productos disponibles</h1>
+        </div>
+        <button class="btn btn-primario" onclick="abrirCarrito()" id="btnCarrito">
+          Carrito <span id="conteoCarrito">0</span>
+        </button>
+      </div>
+
+      <!-- BUSQUEDA Y FILTROS -->
+      <div style="display:flex; gap:0.75rem; margin-bottom:1.5rem; flex-wrap:wrap; align-items:center;">
+        <input type="text" id="campoBusqueda" class="campo" placeholder="Buscar por nombre o marca..." style="max-width:400px; flex:1; min-width:200px;" onkeyup="if(event.key==='Enter')buscarProductos()" />
+        <select id="filtroCategoria" class="campo" style="max-width:220px; flex:1; min-width:150px;" onchange="buscarProductos()">
+          <option value="">Todas las categorias</option>
+        </select>
+        <button class="btn btn-primario" onclick="buscarProductos()">Buscar</button>
+      </div>
+
+      <!-- GRILLA DE PRODUCTOS -->
+      <div class="grid-productos" id="grillaProductos">
+        <p style="grid-column:1/-1; text-align:center; color:var(--texto-suave);">Cargando productos...</p>
+      </div>
+
+      <!-- PAGINACION -->
+      <div class="paginacion" id="paginacion"></div>
+
+      <!-- COMPRAS RECIENTES -->
+      <div style="margin-top:2rem;">
+        <h2 style="font-size:1.125rem; font-weight:700; color:var(--texto); margin-bottom:1rem;">Compras recientes</h2>
+        <div id="comprasRecientes"></div>
+      </div>
+    </main>
+  </div>
+
+  <!-- CARRITO LATERAL -->
+  <div class="carrito-lateral" id="carritoLateral">
+    <div class="carrito-cabecera">
+      <h3 style="font-size:1rem;">Tu carrito</h3>
+      <button class="btn btn-sm" onclick="cerrarCarrito()" style="background:none; border:1px solid var(--borde);">✕</button>
+    </div>
+    <div class="carrito-items" id="itemsCarrito">
+      <p style="color:var(--texto-suave); text-align:center;">Carrito vacio</p>
+    </div>
+    <div class="carrito-pie" id="pieCarrito" style="display:none;">
+      <div class="carrito-total">
+        <span>Total:</span>
+        <span id="totalCarrito">$0.00</span>
+      </div>
+      <button class="btn btn-primario btn-block" onclick="pagarCarrito()">Pagar ahora</button>
+    </div>
+  </div>
+
+  <script src="../js/utilerias.js"></script>
+  <script src="../js/api.js"></script>
+  <script src="../js/carrito.js"></script>
+  <script>
+    const TAMANO_PAGINA = 12;
+    let paginaActual = 1;
+    let totalPaginas = 1;
+    let busquedaActual = "";
+    let categoriaActual = "";
+
+    const usuario = obtenerUsuario();
+    if (!usuario.registrado || usuario.tipo !== "Cliente") {
+      window.location.href = "../iniciar-sesion.html";
+    }
+
+    function actualizarConteoCarrito() {
+      const items = Carrito.obtener(usuario.id);
+      document.getElementById("conteoCarrito").textContent = Carrito.obtenerConteo(items);
+    }
+
+    async function cargarCategorias() {
+    const CATEGORIAS_DEFAULT = [
+      "Apparel",
+      "Audio CD",
+      "Automotive",
+      "Blu-ray",
+      "Electronics",
+      "Escolar",
+      "Grocery",
+      "Health and Beauty",
+      "Home",
+      "Kindle Edition",
+      "Kitchen",
+      "Lawn & Patio",
+      "Misc.",
+      "Office Product",
+      "Personal Computers",
+      "Product Bundle",
+      "Software Download",
+      "Sports",
+      "Target",
+      "Tools & Home Improvement",
+      "Toy",
+      "Video Game",
+      "Vinyl",
+      "Watch",
+      "Wireless Phone Accessory"
+    ];
+          
+      let categorias = [...CATEGORIAS_DEFAULT];
+      try {
+        const catsApi = await Api.obtenerCategorias();
+        if (Array.isArray(catsApi) && catsApi.length > 0) {
+          const setUnico = new Set([...catsApi, ...CATEGORIAS_DEFAULT]);
+          categorias = Array.from(setUnico).sort((a, b) => a.localeCompare(b, "es", { sensitivity: "base" }));
+        }
+      } catch (error) {
+        console.error("Error al cargar categorias desde la API, usando por defecto:", error);
+      }
+
+      const select = document.getElementById("filtroCategoria");
+      if (select) {
+        select.innerHTML = '<option value="">Todas las categorias</option>' + 
+          categorias.map(cat => `<option value="${cat}">${cat}</option>`).join("");
+      }
+    }
+
+    async function cargarProductos(pagina = 1, busqueda = "", categoria = "") {
+      paginaActual = pagina;
+      busquedaActual = busqueda;
+      categoriaActual = categoria;
+      try {
+        const datos = await Api.listarProductosCliente(pagina, busqueda, TAMANO_PAGINA, categoria);
+        const productos = datos.items || [];
+        totalPaginas = datos.total_pages || 1;
+        paginaActual = datos.page || 1;
+        renderizarProductos(productos);
+        renderizarPaginacion();
+      } catch (error) {
+        document.getElementById("grillaProductos").innerHTML =
+          `<p style="grid-column:1/-1; text-align:center; color:var(--error);">Error: ${error.message}</p>`;
+      }
+    }
+
+    function renderizarProductos(productos) {
+      const grilla = document.getElementById("grillaProductos");
+      if (productos.length === 0) {
+        grilla.innerHTML = `<p style="grid-column:1/-1; text-align:center; color:var(--texto-suave);">No hay productos disponibles.</p>`;
+        return;
+      }
+
+      grilla.innerHTML = productos.map((p) => `
+        <div class="tarjeta-producto">
+          <span class="categoria">${p.categoria || "General"}</span>
+          <span class="nombre-producto" title="${p.nombre || ""}">${truncarTexto(p.nombre, 35)}</span>
+          <span class="marca">${truncarTexto(p.marca, 20) || "---"}</span>
+          <span class="precio">${formatearDinero(p.precio_actual)}</span>
+          <span style="font-size:0.75rem; color:var(--texto-suave);">
+            Stock: <strong>${p.stock || 0}</strong>
+            ${p.vendedor_nombre ? "| Vendedor: " + truncarTexto(p.vendedor_nombre, 18) : ""}
+          </span>
+          <div class="acciones">
+            <a href="producto.html?id=${p.id_producto}" class="btn btn-secundario btn-sm" style="flex:1;">Detalle</a>
+            <button class="btn btn-primario btn-sm" onclick="agregarAlCarrito('${p.id_producto}', '${p.nombre.replace(/'/g, "\\'")}', ${p.precio_actual || 0}, '${(p.marca || "").replace(/'/g, "\\'")}')">+ Carrito</button>
+          </div>
+        </div>
+      `).join("");
+    }
+
+    function renderizarPaginacion() {
+      const div = document.getElementById("paginacion");
+      if (totalPaginas <= 1) { div.innerHTML = ""; return; }
+
+      let html = "";
+      html += `<button ${paginaActual <= 1 ? "disabled" : ""} onclick="cargarProductos(1, '${busquedaActual}', '${categoriaActual}')">Primera</button>`;
+      html += `<button ${paginaActual <= 1 ? "disabled" : ""} onclick="cargarProductos(${paginaActual - 1}, '${busquedaActual}', '${categoriaActual}')">Anterior</button>`;
+
+      for (let i = Math.max(1, paginaActual - 2); i <= Math.min(totalPaginas, paginaActual + 2); i++) {
+        html += `<button class="${i === paginaActual ? "activa" : ""}" onclick="cargarProductos(${i}, '${busquedaActual}', '${categoriaActual}')">${i}</button>`;
+      }
+
+      html += `<button ${paginaActual >= totalPaginas ? "disabled" : ""} onclick="cargarProductos(${paginaActual + 1}, '${busquedaActual}', '${categoriaActual}')">Siguiente</button>`;
+      html += `<button ${paginaActual >= totalPaginas ? "disabled" : ""} onclick="cargarProductos(${totalPaginas}, '${busquedaActual}', '${categoriaActual}')">Ultima</button>`;
+      html += `<span>Pagina ${paginaActual} de ${totalPaginas}</span>`;
+
+      div.innerHTML = html;
+    }
+
+    function buscarProductos() {
+      const busqueda = document.getElementById("campoBusqueda").value.trim();
+      const categoria = document.getElementById("filtroCategoria").value;
+      cargarProductos(1, busqueda, categoria);
+    }
+
+    function agregarAlCarrito(id, nombre, precio, marca) {
+      Carrito.agregar(usuario.id, {
+        id_producto: id,
+        nombre: nombre,
+        precio_actual: precio,
+        marca: marca,
+      });
+      actualizarConteoCarrito();
+      mostrarNotificacion("Producto agregado al carrito.", "exito");
+    }
+
+    // === CARRITO LATERAL ===
+    function abrirCarrito() {
+      const items = Carrito.obtener(usuario.id);
+      const contenedor = document.getElementById("itemsCarrito");
+      const pie = document.getElementById("pieCarrito");
+
+      if (items.length === 0) {
+        contenedor.innerHTML = '<p style="color:var(--texto-suave); text-align:center;">Carrito vacio</p>';
+        pie.style.display = "none";
+      } else {
+        contenedor.innerHTML = items.map((item) => `
+          <div class="carrito-item">
+            <div class="info">
+              <div class="nombre">${truncarTexto(item.nombre, 25)}</div>
+              <div class="precio">${formatearDinero(item.precio_actual)}</div>
+            </div>
+            <div class="cantidad-control">
+              <button onclick="cambiarCantidad('${item.id_producto}', ${item.cantidad - 1})">-</button>
+              <span>${item.cantidad}</span>
+              <button onclick="cambiarCantidad('${item.id_producto}', ${item.cantidad + 1})">+</button>
+            </div>
+          </div>
+        `).join("");
+
+        pie.style.display = "block";
+        document.getElementById("totalCarrito").textContent = formatearDinero(Carrito.obtenerTotal(items));
+      }
+
+      document.getElementById("carritoLateral").classList.add("abierto");
+    }
+
+    function cerrarCarrito() {
+      document.getElementById("carritoLateral").classList.remove("abierto");
+      actualizarConteoCarrito();
+    }
+
+    function cambiarCantidad(idProducto, nuevaCantidad) {
+      Carrito.actualizarCantidad(usuario.id, idProducto, nuevaCantidad);
+      abrirCarrito();
+    }
+
+    async function pagarCarrito() {
+      const items = Carrito.obtener(usuario.id);
+      if (items.length === 0) {
+        mostrarNotificacion("El carrito esta vacio.", "error");
+        return;
+      }
+
+      try {
+        const resultado = await Api.realizarCompra(usuario.id, items);
+        Carrito.vaciar(usuario.id);
+        cerrarCarrito();
+        actualizarConteoCarrito();
+        mostrarNotificacion("Compra realizada con exito.", "exito");
+        cargarComprasRecientes();
+
+        // Mostrar ticket
+        setTimeout(() => {
+          if (resultado.id_venta) {
+            window.open("historial.html", "_self");
+          }
+        }, 1000);
+      } catch (error) {
+        mostrarNotificacion("Error al pagar: " + error.message, "error");
+      }
+    }
+
+    // === COMPRAS RECIENTES ===
+    async function cargarComprasRecientes() {
+      try {
+        const datos = await Api.listarComprasCliente(usuario.id, "30d", 1, 4);
+        const compras = datos.items || [];
+        const div = document.getElementById("comprasRecientes");
+
+        if (compras.length === 0) {
+          div.innerHTML = '<p style="color:var(--texto-suave); font-size:0.875rem;">No hay compras recientes.</p>';
+          return;
+        }
+
+        div.innerHTML = compras.map((c) => `
+          <div class="tarjeta-simple" style="margin-bottom:0.75rem; padding:1rem;">
+            <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:0.5rem;">
+              <div>
+                <strong style="display:block; font-size:0.8125rem; color:#78716c; margin-bottom:0.125rem;">Folio: ${c.id_venta}</strong>
+                <small style="color:var(--texto-suave);">${formatearFecha(c.fecha_venta)}</small>
+                <p style="font-size:0.875rem; font-weight:600; margin-top:0.25rem;">${truncarTexto(c.resumen || "Compra", 40)}</p>
+              </div>
+              <div style="text-align:right;">
+                <strong style="color:var(--ambar);">${formatearDinero(c.monto_total)}</strong>
+                <small style="display:block; color:var(--texto-suave);">${c.total_unidades} unidades</small>
+              </div>
+            </div>
+          </div>
+        `).join("");
+      } catch {
+        document.getElementById("comprasRecientes").innerHTML =
+          '<p style="color:var(--texto-suave); font-size:0.875rem;">No se pudieron cargar compras recientes.</p>';
+      }
+    }
+
+    function cerrarSesionNav() {
+      cerrarSesion();
+    }
+
+    // Inicializar
+    actualizarConteoCarrito();
+    cargarCategorias();
+    cargarProductos();
+    cargarComprasRecientes();
+  </script>
+</body>
+</html>
