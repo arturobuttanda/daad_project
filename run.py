@@ -8,6 +8,7 @@ import platform
 import time
 import venv
 import webbrowser
+import urllib.request
 from pathlib import Path
 
 RAIZ = Path(__file__).resolve().parent
@@ -77,7 +78,7 @@ def principal():
     try:
         comando_backend = [
             str(python), "-m", "uvicorn", "Backend.app:app",
-            "--reload", "--host", "127.0.0.1", "--port", "8000",
+            "--reload", "--host", "0.0.0.0", "--port", "8000",
         ]
         proceso_backend = iniciar_proceso(comando_backend, cwd=RAIZ, env=env, stdout=log_out, stderr=log_err)
     except Exception as exc:
@@ -108,14 +109,24 @@ def principal():
         print("Carpeta Frontend no encontrada.")
 
     print("\n" + "="*60)
-    print("  Frontend: http://localhost:5180/iniciar-sesion.html")
+    print("  Frontend: http://127.0.0.1:5180/iniciar-sesion.html")
     print("  Backend:  http://127.0.0.1:8000")
 
+    # Esperar a que el backend esté listo antes de abrir el navegador
+    print("Esperando que el backend esté listo...")
+    for intento in range(15):
+        try:
+            with urllib.request.urlopen("http://127.0.0.1:8000/api/health", timeout=3):
+                print("Backend listo.")
+                break
+        except Exception:
+            if intento < 14:
+                time.sleep(1)
+            else:
+                print("ADVERTENCIA: El backend no responde. Revisa los logs.")
 
-    # Abrir automaticamente el navegador despues de 1.5 segundos
     try:
-        time.sleep(1.5)
-        webbrowser.open("http://localhost:5180/iniciar-sesion.html")
+        webbrowser.open("http://127.0.0.1:5180/iniciar-sesion.html")
     except Exception:
         pass
 

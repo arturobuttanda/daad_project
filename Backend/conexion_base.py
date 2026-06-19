@@ -15,6 +15,10 @@ from pathlib import Path
 from typing import Iterable
 
 import oracledb
+try:
+    oracledb.defaults.connect_timeout = 5
+except AttributeError:
+    pass
 from dotenv import load_dotenv
 
 from Backend.modelo_poo import Cliente, Persona, Producto, Venta, Vendedor, crear_usuario_desde_fila_usuario, crear_venta_por_item
@@ -60,10 +64,17 @@ class ValidacionBaseDatosError(Exception):
 
 
 class BaseOracle:
-    """Conexion y operaciones con Oracle Autonomous Database."""
+    """Conexion y operaciones con Oracle Autonomous Database usando connection pool."""
 
     def __init__(self):
         self._columnas_producto: tuple[str, ...] | None = None
+        self._pool = None
+        self._dsn = self._resolver_dsn()
+
+    def _resolver_dsn(self) -> str:
+        ruta_tns = ubicacion_wallet / "tnsnames.ora"
+        cadena_conexion = self._analizar_tnsnames(ruta_tns, DSN_DB)
+        return cadena_conexion or DSN_DB
 
     def _analizar_tnsnames(self, ruta_tns: Path, nombre_dsn: str) -> str | None:
         if not ruta_tns.exists():
@@ -99,25 +110,25 @@ class BaseOracle:
         except Exception:
             return None
 
+    def _obtener_pool(self):
+        if self._pool is None:
+            self._pool = oracledb.create_pool(
+                user=USUARIO_DB,
+                password=CONTRASENA_DB,
+                dsn=self._dsn,
+                config_dir=str(ubicacion_wallet),
+                wallet_location=str(ubicacion_wallet),
+                wallet_password=CONTRASENA_WALLET,
+                min=1,
+                max=10,
+                increment=1,
+                timeout=5,
+            )
+        return self._pool
+
     def conectar(self):
-        """Establece conexion con Oracle usando wallet."""
-        ruta_tns = ubicacion_wallet / "tnsnames.ora"
-        cadena_conexion = self._analizar_tnsnames(ruta_tns, DSN_DB)
-        
-        parametros_conexion = {
-            "user": USUARIO_DB,
-            "password": CONTRASENA_DB,
-            "config_dir": str(ubicacion_wallet),
-            "wallet_location": str(ubicacion_wallet),
-            "wallet_password": CONTRASENA_WALLET,
-        }
-        
-        if cadena_conexion:
-            parametros_conexion["dsn"] = cadena_conexion
-        else:
-            parametros_conexion["dsn"] = DSN_DB
-        
-        return oracledb.connect(**parametros_conexion)
+        """Obtiene conexion del pool. Al cerrar, se reusa automaticamente."""
+        return self._obtener_pool().acquire()
 
     def obtener_columnas_producto(self) -> tuple[str, ...]:
         """Obtiene las columnas disponibles de la tabla productos."""

@@ -90,17 +90,43 @@ function cerrarSesion() {
 }
 
 function eventoFetch(url, opciones = {}) {
-  return fetch(url, {
+  const TIEMPO_ESPERA = 15000;
+  const controlador = new AbortController();
+  const temporizador = setTimeout(() => controlador.abort(), TIEMPO_ESPERA);
+
+  const opcionesFinales = {
     headers: { "Content-Type": "application/json", ...opciones.headers },
     ...opciones,
-  }).then((res) => {
-    if (!res.ok) {
-      return res.json().then((err) => {
-        throw new Error(err.detail || "Error en la peticion");
-      });
-    }
-    return res.json();
-  });
+    signal: controlador.signal,
+  };
+
+  return fetch(url, opcionesFinales)
+    .then((res) => {
+      clearTimeout(temporizador);
+      if (!res.ok) {
+        if (res.status === 0) {
+          throw new Error("Error de conexion con el servidor.");
+        }
+        return res.json().then((err) => {
+          throw new Error(err.detail || "Error en la peticion");
+        });
+      }
+      return res.json();
+    })
+    .catch((err) => {
+      clearTimeout(temporizador);
+      if (err.name === "AbortError") {
+        throw new Error(
+          "El servidor no respondio a tiempo. Verifica que el backend este corriendo."
+        );
+      }
+      if (err.message === "Failed to fetch") {
+        throw new Error(
+          "No se pudo conectar con el servidor. Verifica que el backend este corriendo."
+        );
+      }
+      throw err;
+    });
 }
 
 // --- AUTO INJECT PROFILE BUTTON & MODAL ---
