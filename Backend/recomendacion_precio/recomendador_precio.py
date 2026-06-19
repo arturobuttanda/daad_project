@@ -18,8 +18,9 @@ import threading
 import logging
 
 import numpy as np
-from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.metrics.pairwise import cosine_similarity
+from sentence_transformers import SentenceTransformer
+
 
 bitacora = logging.getLogger("daad-backend")
 
@@ -80,8 +81,8 @@ class RecomendadorPrecio:
     """
 
     def __init__(self) -> None:
-        self._vectorizador: TfidfVectorizer | None = None
-        self._matriz_tfidf: Any | None = None          # scipy sparse matrix
+        self._modelo: SentenceTransformer | None = None
+        self._embeddings: np.ndarray | None = None       
         self._catalogo: list[dict[str, Any]] = []
         self._firma: tuple[int, str] | None = None
         self._candado = threading.Lock()
@@ -96,54 +97,47 @@ class RecomendadorPrecio:
         categoria = _normalizar_texto(producto.get("categoria"))
 
         # Dar mayor peso al nombre
-        partes = [
-            nombre,
-            nombre,
-            nombre,
-            marca,
-            marca,
-            categoria
-        ]
+        partes = [nombre, marca, categoria]
 
         return " ".join(p for p in partes if p) or "producto"
 
-    def _ajustar_vectorizador(self, catalogo: list[dict[str, Any]]) -> None:
-        """Entrena el TfidfVectorizer con todos los documentos del catálogo."""
-        documentos = [self._construir_documento(p) for p in catalogo]
-        vectorizador = TfidfVectorizer(
-            analyzer="char_wb",
-            ngram_range=(3, 5),
-            min_df=1,
-            sublinear_tf=True,
-        )
-        self._matriz_tfidf = vectorizador.fit_transform(documentos)
-        self._vectorizador = vectorizador
-        self._catalogo = catalogo
+    
 
     def _asegurar_indice(self) -> None:
         """Carga o recarga el índice TF-IDF cuando el catálogo cambia."""
         from Backend.conexion_base import db
         with self._candado:
             firma = db.obtener_firma_catalogo_similitud()
-            if self._firma == firma and self._vectorizador is not None:
+            if self._firma == firma and self._embeddings is not None:
                 return
             catalogo = db.cargar_catalogo_similitud(firma)
-            self._ajustar_vectorizador(catalogo)
+            self._construir_embeddings(catalogo)
             self._firma = firma
+    def _calcular_similitudes( self, documento_objetivo: str) -> np.ndarray:
+
+        embedding_objetivo = self._modelo.encode(
+            [documento_objetivo],
+            normalize_embeddings=True
+        )
+
+        similitudes = cosine_similarity(
+            embedding_objetivo,
+            self._embeddings
+        )
+
+        return similitudes.flatten()
 
     # ------------------------------------------------------------------
     # Métodos privados — cálculo de similitudes
     # ------------------------------------------------------------------
+    def _cargar_modelo(self) -> None:
 
-    def _calcular_similitudes(self, documento_objetivo: str) -> np.ndarray:
-        """Vectoriza el documento objetivo y calcula la similitud coseno.
+        if self._modelo is None:
+            self._modelo = SentenceTransformer(
+                "sentence-transformers/all-MiniLM-L6-v2"
+            )
 
-        Retorna un array 1D con la similitud de cada producto del catálogo.
-        """
-        vector_objetivo = self._vectorizador.transform([documento_objetivo])
-        similitudes = cosine_similarity(vector_objetivo, self._matriz_tfidf)
-        return similitudes.flatten()
-
+   
     def _filtrar_y_ordenar(
         self,
         similitudes: np.ndarray,
@@ -170,6 +164,21 @@ class RecomendadorPrecio:
 
         candidatos.sort(key=lambda par: par[0], reverse=True)
         return candidatos[:_LIMITE_SIMILARES]
+    def _construir_embeddings(self,catalogo: list[dict[str, Any]]) -> None:
+
+        self._cargar_modelo()
+
+        documentos = [
+            self._construir_documento(p)
+            for p in catalogo
+        ]
+
+        self._embeddings = self._modelo.encode(
+            documentos,
+            normalize_embeddings=True
+        )
+
+        self._catalogo = catalogo
 
     # ------------------------------------------------------------------
     # Métodos privados — cálculo del precio
@@ -232,15 +241,17 @@ class RecomendadorPrecio:
         documento = self._construir_documento(objetivo)
         similitudes = self._calcular_similitudes(documento)
         similares = self._filtrar_y_ordenar(similitudes, id_excluido=id_producto)
-        similares = [
-    (sim, prod)
-    for sim, prod in similares
-    if (
-        _normalizar_texto(prod.get("categoria"))
-        ==
-        _normalizar_texto(categoria)
-    )
-]
+        if categoria:
+
+            similares = [
+                (sim, prod)
+                for sim, prod in similares
+                if (
+                    _normalizar_texto(prod.get("categoria"))
+                    ==
+                    _normalizar_texto(categoria)
+                )
+            ]
 
         # Advertencia cuando hay pocos similares
         advertencia: str | None = None
