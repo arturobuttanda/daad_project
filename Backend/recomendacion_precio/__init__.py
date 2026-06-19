@@ -1,1 +1,1 @@
-from .similitud import construir_perfil_producto, rankear_productos_similares, resumir_precios_similares
+from .recomendador_precio import RecomendadorPrecio, obtener_recomendador

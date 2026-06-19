@@ -48,7 +48,6 @@
         <div class="tarjeta-estadistica"><div class="valor" style="font-size:1.25rem;" id="valGanancia">---</div><div class="etiqueta-est">Ganancia</div></div>
         <div class="tarjeta-estadistica"><div class="valor" style="font-size:1.25rem;" id="valMargen">---</div><div class="etiqueta-est">Margen</div></div>
         <div class="tarjeta-estadistica"><div class="valor" style="font-size:1.25rem;" id="valVentas">---</div><div class="etiqueta-est">Total ventas</div></div>
-        <div class="tarjeta-estadistica"><div class="valor" style="font-size:1.25rem;" id="valTicket">---</div><div class="etiqueta-est">Ticket promedio</div></div>
         <div class="tarjeta-estadistica"><div class="valor" style="font-size:1.25rem;" id="valStockBajo">---</div><div class="etiqueta-est">Stock bajo</div></div>
         <div class="tarjeta-estadistica"><div class="valor" style="font-size:1.25rem;" id="valEstancados">---</div><div class="etiqueta-est">Estancados</div></div>
       </div>
@@ -98,7 +97,6 @@
         document.getElementById("valGanancia").textContent = "$0.00";
         document.getElementById("valMargen").textContent = "0%";
         document.getElementById("valVentas").textContent = "0";
-        document.getElementById("valTicket").textContent = "$0.00";
         document.getElementById("valStockBajo").textContent = "0";
         document.getElementById("valEstancados").textContent = "0";
       }
@@ -141,7 +139,6 @@
       document.getElementById("valGanancia").textContent = formatearDinero(datos.profit);
       document.getElementById("valMargen").textContent = datos.margin_percent + "%";
       document.getElementById("valVentas").textContent = datos.total_sales || 0;
-      document.getElementById("valTicket").textContent = formatearDinero(datos.avg_ticket);
       document.getElementById("valStockBajo").textContent = datos.low_stock_products || 0;
       document.getElementById("valEstancados").textContent = datos.stagnant_products || 0;
     }
@@ -156,9 +153,6 @@
       if (datos.margin_percent < 20) {
         recomendaciones.push(`El margen de ganancia (${datos.margin_percent}%) esta por debajo del recomendado. Revisa tus precios.`);
       }
-      if (datos.avg_ticket > 0 && datos.avg_ticket < 500) {
-        recomendaciones.push("El ticket promedio es bajo. Considera estrategias de venta cruzada.");
-      }
       if (recomendaciones.length === 0) {
         recomendaciones.push("No hay recomendaciones pendientes. El sistema se encuentra en buen estado.");
       }
@@ -169,7 +163,7 @@
     }
 
     function descargarCSV() {
-      Api.descargarReporteVentas("all");
+      Api.descargarReporteVentas("all", usuario.id);
     }
 
     function cerrarSesionNav() {

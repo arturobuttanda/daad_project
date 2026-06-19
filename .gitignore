@@ -14,10 +14,6 @@ build/
 venv/
 env/
 
-# Environment variables (credentials, API keys, secrets)
-.env
-.env.*
-!.env.example
 
 # Generated data files (local scraped output, never committed)
 productos_*.json

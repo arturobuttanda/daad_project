@@ -202,7 +202,7 @@ class BaseOracle:
                 columnas_seleccion = self.construir_columnas_seleccion_producto()
                 columnas_insert = [col for col in [
                     "id_producto", "nombre", "marca", "categoria", "precio_actual",
-                    "stock", "precio_fabricacion", "fecha_caducidad", "imagen_url"
+                    "stock", "precio_fabricacion", "imagen_url"
                 ] if col in columnas_seleccion]
 
                 placeholders = ", ".join(f":{col}" for col in columnas_insert)
@@ -245,7 +245,6 @@ class BaseOracle:
                     "precio_actual": "precio_actual",
                     "stock": "stock",
                     "precio_fabricacion": "precio_fabricacion",
-                    "fecha_caducidad": "fecha_caducidad",
                     "imagen_url": "imagen_url",
                 }
 
@@ -271,8 +270,6 @@ class BaseOracle:
                         valores[col] = producto.precio_actual
                     elif col == "precio_fabricacion":
                         valores[col] = producto.precio_fabricacion
-                    elif col == "fecha_caducidad":
-                        valores[col] = producto.fecha_caducidad
                     elif col == "imagen_url":
                         valores[col] = producto.imagen_url
                     elif col == "marca":
@@ -340,17 +337,7 @@ class BaseOracle:
                 filas = cursor.fetchall()
         return [{"fecha": fila[0].isoformat() if fila[0] else None, "precio": float(fila[1])} for fila in filas]
 
-    def obtener_promedio_competencia(self, id_producto: str) -> float | None:
-        """Obtiene el precio promedio de la competencia para un producto."""
-        with self.conectar() as conexion:
-            with conexion.cursor() as cursor:
-                cursor.execute(
-                    "SELECT AVG(precio_competencia_promedio) FROM competencia_mercado "
-                    "WHERE id_producto = :id_producto",
-                    {"id_producto": id_producto},
-                )
-                fila = cursor.fetchone()
-        return float(fila[0]) if fila and fila[0] is not None else None
+
 
     def obtener_firma_catalogo_similitud(self) -> tuple[int, str]:
         """Obtiene la firma del catalogo (conteo + fecha) para cache de similitud."""
@@ -847,16 +834,6 @@ class BaseOracle:
                     cursor.execute("SELECT COUNT(*) FROM productos WHERE fecha_actualizacion < (CURRENT_DATE - 30)")
                 estancados = int(cursor.fetchone()[0] or 0)
 
-                if id_vendedor:
-                    cursor.execute(
-                        "SELECT AVG(monto_total) FROM ventas WHERE id_vendedor = :id_vendedor",
-                        {"id_vendedor": id_vendedor},
-                    )
-                else:
-                    cursor.execute("SELECT AVG(monto_total) FROM ventas")
-                fila_ticket = cursor.fetchone()
-                ticket_promedio = float(fila_ticket[0] or 0)
-
         return {
             "total_productos": total_productos,
             "total_vendedores": total_vendedores,
@@ -866,7 +843,6 @@ class BaseOracle:
             "costos_totales": costo_total,
             "productos_stock_bajo": stock_bajo,
             "productos_estancados": estancados,
-            "avg_ticket": ticket_promedio,
         }
 
     def obtener_ventas_mensuales(self, id_vendedor=None, meses=6):

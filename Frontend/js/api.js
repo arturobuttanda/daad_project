@@ -129,8 +129,12 @@ const Api = {
     return eventoFetch(url);
   },
 
-  descargarReporteVentas(periodo = "all") {
-    window.open(`${BACKEND_URL}/api/vendedor/reportes/ventas/csv?period=${periodo}`, "_blank");
+  descargarReporteVentas(periodo = "all", idVendedor = null) {
+    let url = `${BACKEND_URL}/api/vendedor/reportes/ventas/csv?period=${periodo}`;
+    if (idVendedor) {
+      url += `&id_vendedor=${encodeURIComponent(idVendedor)}`;
+    }
+    window.open(url, "_blank");
   },
 };
 

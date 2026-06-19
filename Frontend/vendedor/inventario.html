@@ -24,7 +24,6 @@
         </a></li>
       </ul>
       <div style="padding:1rem 1.25rem; margin-top:auto;">
-        <button class="btn btn-primario btn-sm btn-block" onclick="abrirModalNuevo()">+ Agregar producto</button>
         <button class="btn btn-sm btn-block mt-1" style="border:1px solid var(--error); color:var(--error);" onclick="cerrarSesionNav()">Cerrar sesion</button>
       </div>
     </aside>
@@ -37,7 +36,7 @@
           <small style="color:var(--texto-suave); text-transform:uppercase; font-weight:600; letter-spacing:0.05em;">Bienvenido</small>
           <h1 id="tituloBienvenida" style="font-size:1.5rem; font-weight:700; color:var(--texto);">Panel de inventario</h1>
         </div>
-        <button class="btn btn-primario" onclick="abrirModalNuevo()">+ Nuevo producto</button>
+        <button class="btn btn-primario" onclick="abrirModalNuevo()">+ Agregar producto</button>
       </div>
 
       <!-- ESTADISTICAS -->
@@ -61,13 +60,12 @@
               <th>Precio</th>
               <th>Stock</th>
               <th>Costo</th>
-              <th>Vencimiento</th>
               <th>Actualizacion</th>
               <th>Acciones</th>
             </tr>
           </thead>
           <tbody id="tablaProductos">
-            <tr><td colspan="10" style="text-align:center; color:var(--texto-suave);">Cargando productos...</td></tr>
+            <tr><td colspan="9" style="text-align:center; color:var(--texto-suave);">Cargando productos...</td></tr>
           </tbody>
         </table>
       </div>
@@ -81,7 +79,7 @@
   <div class="modal-overlay" id="modalProducto" style="display:none;">
     <div class="modal-contenido">
       <div class="modal-cabecera">
-        <h2 id="tituloModal">Nuevo producto</h2>
+        <h2 id="tituloModal">Agregar producto</h2>
         <button class="btn btn-sm" onclick="cerrarModal()" style="background:none; border:1px solid var(--borde);">✕</button>
       </div>
       <div class="modal-cuerpo">
@@ -176,7 +174,7 @@
     function renderizarProductos() {
       const tbody = document.getElementById("tablaProductos");
       if (productos.length === 0) {
-        tbody.innerHTML = `<tr><td colspan="10" style="text-align:center; color:var(--texto-suave);">No hay productos.</td></tr>`;
+        tbody.innerHTML = `<tr><td colspan="9" style="text-align:center; color:var(--texto-suave);">No hay productos.</td></tr>`;
         return;
       }
 
@@ -189,7 +187,6 @@
           <td style="font-weight:600; color:var(--ambar);">${formatearDinero(p.precio_actual)}</td>
           <td><span class="${(p.stock || 0) <= 10 ? "etiqueta etiqueta-roja" : "etiqueta etiqueta-verde"}">${p.stock || 0}</span></td>
           <td>${formatearDinero(p.precio_fabricacion)}</td>
-          <td style="font-size:0.75rem;">${formatearFecha(p.fecha_caducidad)}</td>
           <td style="font-size:0.75rem;">${formatearFecha(p.fecha_actualizacion)}</td>
           <td>
             <div style="display:flex; gap:0.375rem;">
@@ -224,13 +221,11 @@
       const total = productos.length;
       const stockBajo = productos.filter((p) => (p.stock || 0) <= 10).length;
       const conCosto = productos.filter((p) => p.precio_fabricacion != null).length;
-      const conVencimiento = productos.filter((p) => p.fecha_caducidad).length;
 
       document.getElementById("estadisticas").innerHTML = `
         <div class="tarjeta-estadistica"><div class="valor">${total}</div><div class="etiqueta-est">Productos</div></div>
         <div class="tarjeta-estadistica"><div class="valor" style="color:${stockBajo > 0 ? "var(--error)" : "var(--exito)"};">${stockBajo}</div><div class="etiqueta-est">Stock bajo</div></div>
-        <div class="tarjeta-estadistica"><div class="valor">${conCosto}</div><div class="etiqueta-est">Con costo</div></div>
-        <div class="tarjeta-estadistica"><div class="valor">${conVencimiento}</div><div class="etiqueta-est">Con vencimiento</div></div>
+        <div class="tarjeta-estadistica"><div class="valor">${conCosto}</div><div class="etiqueta-est">Productos Disponibles</div></div>
       `;
     }
 
@@ -244,23 +239,13 @@
       const datosCats = Object.entries(cats).map(([k, v]) => ({ etiqueta: k, valor: v }));
       Graficos.barras("graficoCategorias", datosCats.slice(0, 10), "Productos por categoria");
 
-      // Rangos de stock
-      const rangos = { "0-4": 0, "5-9": 0, "10-19": 0, "20+": 0 };
-      productos.forEach((p) => {
-        const s = p.stock || 0;
-        if (s <= 4) rangos["0-4"]++;
-        else if (s <= 9) rangos["5-9"]++;
-        else if (s <= 19) rangos["10-19"]++;
-        else rangos["20+"]++;
-      });
-      const datosStock = Object.entries(rangos).map(([k, v]) => ({ etiqueta: k, valor: v }));
-      Graficos.barras("graficoStock", datosStock, "Distribucion de stock");
+
     }
 
     // === MODAL ===
     function abrirModalNuevo() {
       editandoId = null;
-      document.getElementById("tituloModal").textContent = "Nuevo producto";
+      document.getElementById("tituloModal").textContent = "Agregar producto";
       document.getElementById("btnGuardarProducto").textContent = "Guardar";
       document.getElementById("formularioProducto").reset();
       document.getElementById("recomendacionPrecio").style.display = "none";
@@ -337,26 +322,43 @@
     document.querySelectorAll("#nombreProducto, #marcaProducto, #categoriaProducto").forEach((el) => {
       el.addEventListener("input", function () {
         clearTimeout(recomendacionTimer);
+        
+        const nombre = document.getElementById("nombreProducto").value.trim();
+        const scoreMarca = document.getElementById("marcaProducto").value.trim();
+        const scoreCat = document.getElementById("categoriaProducto").value.trim();
+        
+        // Solo calcular cuando los 3 campos tengan informacion
+        if (!nombre || !scoreMarca || !scoreCat) {
+          document.getElementById("recomendacionPrecio").style.display = "none";
+          return;
+        }
+
+        // Mostrar estado 'calculando' de forma inmediata con una animacion premium
+        document.getElementById("recomendacionPrecio").style.display = "block";
+        document.getElementById("contenidoRecomendacion").innerHTML = `
+          <div style="display:flex; align-items:center; gap:0.5rem; color:var(--texto-suave); padding:0.25rem 0; font-size:0.78rem;">
+            <div class="loader-giro" style="width:14px; height:14px; border:2px solid var(--borde); border-top-color:var(--ambar); border-radius:50%; animation:rotar-anim 0.8s linear infinite;"></div>
+            <span>Calculando similitud y recomendación...</span>
+          </div>
+          <style>
+            @keyframes rotar-anim { to { transform: rotate(360deg); } }
+          </style>
+        `;
+
         recomendacionTimer = setTimeout(() => {
-          const nombre = document.getElementById("nombreProducto").value.trim();
-          if (nombre.length < 3) {
-            document.getElementById("recomendacionPrecio").style.display = "none";
-            return;
-          }
-          Api.recomendarPrecio(
-            document.getElementById("marcaProducto").value.trim() || null,
-            document.getElementById("categoriaProducto").value.trim() || null,
-            nombre
-          ).then((data) => {
-            if (data.precio_sugerido) {
+          Api.recomendarPrecio(scoreMarca, scoreCat, nombre).then((data) => {
+            const precioRec = data.precio_recomendado || data.precio_sugerido;
+            if (precioRec) {
               document.getElementById("recomendacionPrecio").style.display = "block";
-              
-              let similaresHtml = "";
-              if (data.similares && data.similares.length > 0) {
-                similaresHtml = `
+
+              // Tabla de productos utilizados
+              const utilizados = data.productos_utilizados || data.similares || [];
+              let tablaHtml = "";
+              if (utilizados.length > 0) {
+                tablaHtml = `
                   <div style="margin-top:0.75rem; border-top:1px solid var(--borde-suave); padding-top:0.5rem;">
-                    <div style="font-weight:600; color:var(--texto); margin-bottom:0.35rem; font-size:0.8rem;">Productos similares detectados:</div>
-                    <div style="max-height:150px; overflow-y:auto; padding-right:0.25rem;">
+                    <div style="font-weight:600; color:var(--texto); margin-bottom:0.35rem; font-size:0.8rem;">Productos usados en el c&aacute;lculo:</div>
+                    <div style="max-height:160px; overflow-y:auto; padding-right:0.25rem;">
                       <table style="width:100%; border-collapse:collapse; text-align:left; font-size:0.75rem;">
                         <thead>
                           <tr style="border-bottom:1px solid var(--borde-suave); color:var(--texto-suave);">
@@ -366,11 +368,11 @@
                           </tr>
                         </thead>
                         <tbody>
-                          ${data.similares.map(p => `
+                          ${utilizados.map(p => `
                             <tr style="border-bottom:1px dashed var(--borde-suave);">
                               <td title="${p.nombre}" style="padding:0.35rem 0; max-width:150px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; color:var(--texto);">${p.nombre}</td>
-                              <td style="padding:0.35rem 0; text-align:right; font-weight:600; color:var(--ambar);">${formatearDinero(p.precio_actual)}</td>
-                              <td style="padding:0.35rem 0; text-align:right; color:var(--texto-suave); font-weight:500;">${(p.similitud * 100).toFixed(1)}%</td>
+                              <td style="padding:0.35rem 0; text-align:right; font-weight:600; color:var(--ambar);">${formatearDinero(p.precio || p.precio_actual)}</td>
+                              <td style="padding:0.35rem 0; text-align:right; color:var(--texto-suave); font-weight:500;">${((p.similitud || 0) * 100).toFixed(1)}%</td>
                             </tr>
                           `).join("")}
                         </tbody>
@@ -380,19 +382,30 @@
                 `;
               }
 
+              // Métricas adicionales
+              const simProm = data.similitud_promedio != null ? (data.similitud_promedio * 100).toFixed(1) + "%" : "--";
+              const simMax  = data.similitud_maxima  != null ? (data.similitud_maxima  * 100).toFixed(1) + "%" : "--";
+              const masSimNombre = data.producto_mas_similar ? data.producto_mas_similar.nombre : null;
+              const precioMin = data.precio_min != null ? formatearDinero(data.precio_min) : "--";
+              const precioMax = data.precio_max != null ? formatearDinero(data.precio_max) : "--";
+
               document.getElementById("contenidoRecomendacion").innerHTML = `
                 <div style="display:flex; justify-content:space-between; align-items:center;">
                   <div>
-                    <strong style="font-size:1.25rem; color:var(--ambar); display:block;">${formatearDinero(data.precio_sugerido)}</strong>
-                    <small style="color:var(--texto-suave);">
-                      Rango: ${formatearDinero(data.precio_min)} - ${formatearDinero(data.precio_max)}
-                    </small>
+                    <strong style="font-size:1.25rem; color:var(--ambar); display:block;">${formatearDinero(precioRec)}</strong>
+                    <small style="color:var(--texto-suave);">Rango: ${precioMin} &mdash; ${precioMax}</small>
                   </div>
                   <span style="font-size:0.75rem; background:var(--borde); padding:0.25rem 0.5rem; border-radius:0.25rem; color:var(--texto); font-weight:500;">
-                    ${data.similares ? data.similares.length : 0} similares
+                    ${data.cantidad_similares || utilizados.length} similares
                   </span>
                 </div>
-                ${similaresHtml}
+                <div style="display:flex; gap:1rem; margin-top:0.5rem; font-size:0.78rem; color:var(--texto-suave);">
+                  <span>Sim. prom.: <strong style="color:var(--texto);">${simProm}</strong></span>
+                  <span>Sim. m&aacute;x.: <strong style="color:var(--texto);">${simMax}</strong></span>
+                  ${masSimNombre ? `<span>Producto m&aacute;s similar: <strong style="color:var(--texto);">${masSimNombre}</strong></span>` : ""}
+                </div>
+                ${data.advertencia ? `<div style="margin-top:0.4rem; font-size:0.75rem; color:var(--error);">&laquo;${data.advertencia}&raquo;</div>` : ""}
+                ${tablaHtml}
               `;
             } else {
               document.getElementById("recomendacionPrecio").style.display = "none";
@@ -400,7 +413,7 @@
           }).catch(() => {
             document.getElementById("recomendacionPrecio").style.display = "none";
           });
-        }, 600);
+        }, 500);
       });
     });
 

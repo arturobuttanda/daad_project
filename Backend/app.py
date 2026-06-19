@@ -12,8 +12,8 @@ Define la aplicacion FastAPI que expone la API REST para:
 Este archivo es el punto de entrada del backend web y utiliza el servicio
 Backend.conexion_base.db para acceder a la base de datos Oracle.
 """
-
 import os
+import sys
 import re
 import math
 import uuid
@@ -21,6 +21,9 @@ from functools import lru_cache
 from datetime import date, datetime, timedelta
 from pathlib import Path
 import logging
+
+# Asegurar que el directorio raíz del proyecto esté en sys.path
+sys.path.append(str(Path(__file__).resolve().parent.parent))
 
 from fastapi import FastAPI, HTTPException, Query, status
 from fastapi.middleware.cors import CORSMiddleware
@@ -40,9 +43,7 @@ from Backend.modelo_poo import (
   Cliente, Informe, Persona, Producto, Venta, Vendedor,
   calcular_recomendacion_precio, crear_usuario_desde_fila_usuario
 )
-from Backend.recomendacion_precio import rankear_productos_similares, resumir_precios_similares
-from Backend.recomendacion_precio.similitud import normalizar_texto_similitud
-from Backend.recomendacion_precio.faiss_recommender import recomendar_precio
+from Backend.recomendacion_precio import obtener_recomendador
 
 logging.basicConfig(
   level=logging.INFO,
@@ -143,6 +144,17 @@ class SolicitudRecomendarPrecio(BaseModel):
 
 # === FUNCIONES AUXILIARES ===
 
+def normalizar_texto_busqueda(valor: object | None) -> str:
+  """Normaliza texto para búsqueda: minúsculas, sin acentos, espacios limpios."""
+  if valor is None:
+    return ""
+  import unicodedata
+  texto = str(valor).lower()
+  texto_nfd = unicodedata.normalize("NFD", texto)
+  sin_acentos = "".join(c for c in texto_nfd if unicodedata.category(c) != "Mn")
+  return " ".join(sin_acentos.split())
+
+
 def validar_correo(correo: str) -> bool:
   return "@" in correo
 
@@ -219,25 +231,34 @@ def _paginar_respuesta(
 # === ENDPOINTS: REPORTES ===
 
 @app.get("/api/vendedor/reportes/ventas/csv")
-def exportar_ventas_csv(period: str = Query("all")):
+def exportar_ventas_csv(period: str = Query("all"), id_vendedor: str | None = Query(None)):
   fecha_inicio = resolver_inicio_periodo(period)
 
   consulta = (
     "SELECT v.id_venta, v.fecha_venta, v.id_cliente, cu.nombre AS cliente_nombre, "
-    "v.id_vendedor, uv.nombre AS vendedor_nombre, "
+    "pv.id_vendedor, uv.nombre AS vendedor_nombre, "
     "d.id_producto, p.nombre AS producto_nombre, d.cantidad, d.precio_unitario, "
     "d.subtotal, v.monto_total, v.total_unidades "
     "FROM ventas v "
     "JOIN venta_detalle d ON d.id_venta = v.id_venta "
+    "JOIN producto_vendedor pv ON pv.id_producto = d.id_producto "
     "LEFT JOIN usuarios cu ON cu.id_usuario = v.id_cliente "
-    "LEFT JOIN vendedores vv ON vv.id_vendedor = v.id_vendedor "
+    "LEFT JOIN vendedores vv ON vv.id_vendedor = pv.id_vendedor "
     "LEFT JOIN usuarios uv ON uv.id_usuario = vv.id_vendedor "
     "LEFT JOIN productos p ON p.id_producto = d.id_producto "
   )
+  
+  condiciones = []
   parametros: dict[str, object] = {}
   if fecha_inicio:
-    consulta += " WHERE v.fecha_venta >= :fecha_inicio"
+    condiciones.append("v.fecha_venta >= :fecha_inicio")
     parametros["fecha_inicio"] = fecha_inicio
+  if id_vendedor:
+    condiciones.append("pv.id_vendedor = :id_vendedor")
+    parametros["id_vendedor"] = id_vendedor.strip()
+
+  if condiciones:
+    consulta += " WHERE " + " AND ".join(condiciones)
   consulta += " ORDER BY v.fecha_venta DESC"
 
   try:
@@ -335,16 +356,6 @@ def obtener_historial_precios(id_producto: str, limite: int = 12) -> list[dict[s
     )
 
 
-def obtener_promedio_competencia(id_producto: str) -> float | None:
-  try:
-    return db.obtener_promedio_competencia(id_producto)
-  except Exception as exc:
-    bitacora.exception("Error al consultar competencia de mercado: %s", exc)
-    raise HTTPException(
-      status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-      detail="No se pudo consultar la competencia de mercado.",
-    )
-
 
 def obtener_vendedor_producto(id_producto: str) -> dict[str, object | None] | None:
   try:
@@ -367,41 +378,18 @@ def obtener_persona_por_id(id_usuario: str) -> Persona | None:
       detail="No se pudo consultar el usuario.",
     )
 
-
-def obtener_firma_catalogo_similitud() -> tuple[int, str]:
-  try:
-    return db.obtener_firma_catalogo_similitud()
-  except Exception as exc:
-    bitacora.exception("Error al consultar la firma del catalogo: %s", exc)
-    raise HTTPException(
-      status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-      detail="No se pudo consultar el catalogo de productos.",
-    )
-
-
-@lru_cache(maxsize=8)
-def cargar_catalogo_similitud(firma: tuple[int, str]) -> list[dict[str, object | None]]:
-  try:
-    return db.cargar_catalogo_similitud(firma)
-  except Exception as exc:
-    bitacora.exception("Error al cargar el catalogo para similitud: %s", exc)
-    raise HTTPException(
-      status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-      detail="No se pudo cargar el catalogo de productos.",
-    )
-
+# === FUNCIONES AUXILIARES — RECOMENDACION ===
 
 def calcular_recomendacion_precio_app(
   producto: dict[str, object | None],
   historial: list[dict[str, object]],
-  competencia_promedio: float | None,
 ) -> dict[str, object | None]:
   objeto_producto = Producto.desde_dict(producto)
   return calcular_recomendacion_precio(
     objeto_producto,
     historial,
-    competencia_promedio,
-    cargar_catalogo_similitud(obtener_firma_catalogo_similitud()),
+    competencia_promedio=None,
+    catalogo=None,
     limite=5,
   )
 
@@ -415,9 +403,15 @@ def estado_salud():
 
 @app.post("/api/recomendar-precio")
 def api_recomendar_precio(solicitud: SolicitudRecomendarPrecio):
+  """Endpoint publico de recomendacion de precio (TF-IDF + Coseno)."""
   try:
-    salida = recomendar_precio(solicitud.marca, solicitud.categoria, solicitud.nombre, top_k=10, min_sim=0.6)
-    return salida
+    recomendador = obtener_recomendador()
+    resultado = recomendador.recomendar(
+      nombre=solicitud.nombre,
+      marca=solicitud.marca,
+      categoria=solicitud.categoria,
+    )
+    return resultado
   except Exception as exc:
     bitacora.exception("Error en recomendacion de precio: %s", exc)
     raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(exc))
@@ -425,23 +419,47 @@ def api_recomendar_precio(solicitud: SolicitudRecomendarPrecio):
 
 @app.post("/api/productos/recomendacion-precio")
 def recomendar_precio_producto(solicitud: SolicitudRecomendarPrecio):
-  sugerencia = recomendar_precio(solicitud.marca, solicitud.categoria, solicitud.nombre, top_k=10, min_sim=0.6)
+  """Endpoint de recomendacion de precio para el inventario del vendedor.
+
+  Mantiene compatibilidad con el frontend existente retornando precio_sugerido
+  ademas del precio_recomendado del nuevo servicio TF-IDF.
+  """
+  try:
+    recomendador = obtener_recomendador()
+    resultado = recomendador.recomendar(
+      nombre=solicitud.nombre,
+      marca=solicitud.marca,
+      categoria=solicitud.categoria,
+    )
+  except Exception as exc:
+    bitacora.exception("Error en recomendacion de precio: %s", exc)
+    raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(exc))
+
+  productos_utilizados = resultado.get("productos_utilizados", [])
+
+  # Compatibilidad con el frontend que usa precio_sugerido y similares
   return {
-    "precio_sugerido": sugerencia.get("precio_sugerido"),
-    "precio_min": sugerencia.get("precio_min"),
-    "precio_max": sugerencia.get("precio_max"),
-    "similares": sugerencia.get("similares", []),
-    "suggested_price": sugerencia.get("precio_sugerido"),
-    "reason": "Recomendacion calculada sobre productos similares.",
-    "similar_products": [
+    "precio_recomendado": resultado.get("precio_recomendado"),
+    "precio_sugerido": resultado.get("precio_recomendado"),
+    "precio_actual": resultado.get("precio_actual"),
+    "cantidad_similares": resultado.get("cantidad_similares", 0),
+    "similitud_promedio": resultado.get("similitud_promedio"),
+    "similitud_maxima": resultado.get("similitud_maxima"),
+    "producto_mas_similar": resultado.get("producto_mas_similar"),
+    "advertencia": resultado.get("advertencia"),
+    # Campos legacy para compatibilidad con el frontend actual
+    "precio_min": min((p["precio"] for p in productos_utilizados), default=None),
+    "precio_max": max((p["precio"] for p in productos_utilizados), default=None),
+    "similares": [
       {
-        "id_producto": item.get("id_producto"),
-        "nombre": item.get("nombre"),
-        "precio_actual": item.get("precio_actual"),
-        "similitud": item.get("similitud") if item.get("similitud") is not None else item.get("similarity_score"),
+        "id_producto": p.get("id_producto"),
+        "nombre": p.get("nombre"),
+        "precio_actual": p.get("precio"),
+        "similitud": p.get("similitud"),
       }
-      for item in sugerencia.get("similares", [])
+      for p in productos_utilizados
     ],
+    "productos_utilizados": productos_utilizados,
   }
 
 
@@ -728,7 +746,6 @@ def crear_producto(solicitud: SolicitudCrearProducto):
     precio_venta_actual=solicitud.precio_actual,
     stock=solicitud.stock if solicitud.stock is not None else 0,
     precio_fabricacion=solicitud.precio_fabricacion,
-    fecha_caducidad=solicitud.fecha_caducidad,
     imagen_url=imagen_url,
     categoria=categoria,
   )
@@ -754,9 +771,10 @@ def crear_producto(solicitud: SolicitudCrearProducto):
 
   producto_creado = consultar_producto_por_id(id_producto)
   try:
-    sugerencia = recomendar_precio(marca, categoria, nombre, top_k=10, min_sim=0.6)
+    recomendador = obtener_recomendador()
+    sugerencia = recomendador.recomendar(nombre=nombre, marca=marca, categoria=categoria)
   except Exception:
-    sugerencia = {"precio_sugerido": None, "precio_min": None, "precio_max": None, "similares": []}
+    sugerencia = {"precio_recomendado": None, "precio_sugerido": None, "similares": []}
 
   if producto_creado is None:
     raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="No se pudo recuperar el producto creado.")
@@ -789,7 +807,6 @@ def actualizar_producto(product_id: str, solicitud: SolicitudActualizarProducto)
     precio_actual=solicitud.precio_actual,
     stock=solicitud.stock,
     precio_fabricacion=solicitud.precio_fabricacion,
-    fecha_caducidad=solicitud.fecha_caducidad,
     imagen_url=normalizar_texto_opcional(solicitud.imagen_url) if solicitud.imagen_url is not None else None,
   )
 
@@ -858,7 +875,7 @@ def listar_productos_cliente(
     filtros.append("p.categoria = :category")
     parametros["category"] = category
   if search:
-    termino_norm = normalizar_texto_similitud(search.strip())
+    termino_norm = normalizar_texto_busqueda(search.strip())
     parametros["search"] = f"%{termino_norm}%"
     filtros.append(
       "(" +
@@ -930,15 +947,13 @@ def construir_detalle_producto_cliente(id_producto: str) -> dict[str, object | N
     )
 
   historial = obtener_historial_precios(id_producto, limite=100)
-  competencia_promedio = obtener_promedio_competencia(id_producto)
   vendedor = obtener_vendedor_producto(id_producto)
-  recomendacion = calcular_recomendacion_precio_app(producto, historial, competencia_promedio)
+  recomendacion = calcular_recomendacion_precio_app(producto, historial)
 
   return {
     "product": producto,
     "vendor": vendedor,
     "price_history": historial,
-    "competition_average": competencia_promedio,
     "recommendation": recomendacion,
   }
 
@@ -1066,7 +1081,6 @@ def obtener_indicadores_financieros(id_vendedor: str | None = None):
     total_vendedores=int(indicadores["total_vendedores"]),
     total_clientes=int(indicadores["total_clientes"]),
     total_ventas=int(indicadores["total_ventas"]),
-    ticket_promedio=float(indicadores["avg_ticket"]),
     productos_stock_bajo=int(indicadores["productos_stock_bajo"]),
     productos_estancados=int(indicadores["productos_estancados"]),
   )
@@ -1083,7 +1097,6 @@ def obtener_indicadores_financieros(id_vendedor: str | None = None):
     "total_cost": round(float(indicadores["costos_totales"]), 2),
     "profit": round(ganancia, 2),
     "margin_percent": porcentaje_margen,
-    "avg_ticket": round(float(indicadores["avg_ticket"]), 2),
     "low_stock_products": informe.productos_stock_bajo,
     "stagnant_products": informe.productos_estancados,
   }
