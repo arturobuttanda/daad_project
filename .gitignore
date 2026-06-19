@@ -21,14 +21,10 @@ vendedores_demo.txt
 prueba.json
 *.partial.json
 
-# Separate project (not part of this repo)
-agency-agents/
 
 # Browser profiles (persistent Playwright sessions with cookies)
 .camelcamel_playwright_profile/
 
-# Oracle Wallet (credentials, certificates, private keys)
-wallet/
 
 
 # Logs
