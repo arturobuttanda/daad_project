@@ -4,8 +4,7 @@
  */
 
 console.log("Cargando api.js...");
-console.log("Cargando api.js...");
-const BACKEND_URL = localStorage.getItem("urlApi") || "http://localhost:8000";
+const BACKEND_URL = localStorage.getItem("urlApi") || "http://127.0.0.1:8000";
 
 const Api = {
   obtenerCategorias() {

@@ -56,7 +56,7 @@ URL_FRONTEND = os.environ.get("FRONTEND_URL")
 
 def construir_origenes_permitidos(url_frontend: str | None) -> tuple[list[str], bool]:
   if url_frontend:
-    origenes_permitidos = {url_frontend.strip()}
+    origenes_permitidos = {url_frontend.strip(), "null"}
     if url_frontend.startswith("http://localhost:"):
       origenes_permitidos.add(url_frontend.replace("http://localhost:", "http://127.0.0.1:", 1))
     elif url_frontend.startswith("http://127.0.0.1:"):
