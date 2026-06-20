@@ -164,17 +164,13 @@ class RecomendadorPrecio:
         similitudes: np.ndarray,
         id_excluido: str | None,
         producto_objetivo: dict[str, Any] | None = None,
-        usar_motor_v2: bool = False,
+        estimacion_robusta: bool = False,
     ) -> list[tuple[float, dict[str, Any]]]:
-        """Filtra productos por umbral de similitud y los ordena descendente.
 
-        Excluye el producto consultado (self), aplica el umbral mínimo y
-        limita a _LIMITE_SIMILARES productos.
-        """
         id_excluido_norm = (id_excluido or "").strip().upper()
         candidatos: list[tuple[float, dict[str, Any]]] = []
         
-        atributos_objetivo = self._extraer_atributos_producto(producto_objetivo) if usar_motor_v2 and producto_objetivo else {}
+        atributos_objetivo = self._extraer_atributos_producto(producto_objetivo) if estimacion_robusta and producto_objetivo else {}
         similitud_maxima_local = float(np.max(similitudes)) if len(similitudes) > 0 else 0.0
 
         for indice, similitud in enumerate(similitudes):
@@ -184,7 +180,7 @@ class RecomendadorPrecio:
             similitud_ajustada = float(similitud)
             producto = self._catalogo[indice]
             
-            if usar_motor_v2:
+            if estimacion_robusta:
                 # Umbral relativo del 80% de la similitud máxima
                 if similitud_ajustada < similitud_maxima_local * 0.80:
                     continue
@@ -245,17 +241,10 @@ class RecomendadorPrecio:
     def _precio_ponderado(
         self,
         similares: list[tuple[float, dict[str, Any]]],
-        usar_motor_v2: bool = False,
+        estimacion_robusta: bool = False,
     ) -> float:
-        """Calcula el precio recomendado como promedio ponderado por similitud.
 
-        Fórmula:
-            precio_recomendado = Σ(precio_i × similitud_i) / Σ(similitud_i)
-
-        Los productos con mayor similitud coseno tienen mayor peso, por lo
-        que el precio resultante se acerca más a los productos más parecidos.
-        """
-        if usar_motor_v2:
+        if estimacion_robusta:
             similares_filtrados = self._aplicar_filtro_iqr(similares)
             if len(similares_filtrados) > 0:
                 similares = similares_filtrados
@@ -288,21 +277,9 @@ class RecomendadorPrecio:
         categoria: str | None = None,
         precio_actual: float | None = None,
         id_producto: str | None = None,
-        usar_motor_v2: bool = True,
+        estimacion_robusta: bool = True,
     ) -> dict[str, Any]:
-        """Genera una recomendación de precio para el producto dado.
 
-        Parámetros:
-            nombre: Nombre del producto (obligatorio).
-            marca: Marca del producto (opcional).
-            categoria: Categoría del producto (opcional).
-            precio_actual: Precio actual del producto (para incluirlo en la respuesta).
-            id_producto: ID del producto a excluir del catálogo (evita auto-similitud).
-
-        Retorna:
-            Diccionario con precio_recomendado, métricas de similitud y la
-            lista de productos utilizados en el cálculo.
-        """
         self._asegurar_indice()
 
         objetivo: dict[str, Any] = {
@@ -312,7 +289,7 @@ class RecomendadorPrecio:
         }
         documento = self._construir_documento(objetivo)
         similitudes = self._calcular_similitudes(documento)
-        similares = self._filtrar_y_ordenar(similitudes, id_excluido=id_producto, producto_objetivo=objetivo, usar_motor_v2=usar_motor_v2)
+        similares = self._filtrar_y_ordenar(similitudes, id_excluido=id_producto, producto_objetivo=objetivo, estimacion_robusta=estimacion_robusta)
         if categoria:
 
             similares = [
@@ -346,7 +323,7 @@ class RecomendadorPrecio:
                 "advertencia": advertencia,
             }
 
-        precio_recomendado = self._precio_ponderado(similares, usar_motor_v2=usar_motor_v2)
+        precio_recomendado = self._precio_ponderado(similares, estimacion_robusta=estimacion_robusta)
         similitudes_valores = [sim for sim, _ in similares]
 
         similitud_maxima = float(max(similitudes_valores))
