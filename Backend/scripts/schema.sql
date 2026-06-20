@@ -91,9 +91,7 @@ CREATE TABLE productos (
     precio_actual       NUMBER(10, 2),
     stock               NUMBER(10) DEFAULT 0 NOT NULL,
     precio_fabricacion  NUMBER(10, 2),
-    fecha_caducidad     DATE,
     imagen_url          CLOB,
-    fecha_actualizacion TIMESTAMP DEFAULT CURRENT_TIMESTAMP NOT NULL,
     CONSTRAINT pk_productos PRIMARY KEY (id_producto),
     CONSTRAINT chk_precio_actual CHECK (precio_actual >= 0),
     CONSTRAINT chk_stock CHECK (stock >= 0),
@@ -108,9 +106,7 @@ COMMENT ON COLUMN productos.categoria IS 'Categoria del producto.';
 COMMENT ON COLUMN productos.precio_actual IS 'Precio de venta actual del producto.';
 COMMENT ON COLUMN productos.stock IS 'Cantidad disponible en inventario.';
 COMMENT ON COLUMN productos.precio_fabricacion IS 'Costo interno o precio de fabricacion.';
-COMMENT ON COLUMN productos.fecha_caducidad IS 'Fecha de caducidad del producto si aplica.';
 COMMENT ON COLUMN productos.imagen_url IS 'URL o identificador de la imagen del producto.';
-COMMENT ON COLUMN productos.fecha_actualizacion IS 'Fecha y hora del ultimo cambio en el registro del producto.';
 
 CREATE INDEX idx_productos_cat ON productos(categoria);
 

@@ -572,7 +572,7 @@
       </div>
       <div class="card-sm">
         <h4>productos</h4>
-        <p><code>id_producto</code>, <code>nombre</code>, <code>marca</code>, <code>categoria</code>, <code>precio_actual</code>, <code>stock</code>, <code>precio_fabricacion</code>, <code>imagen_url</code>, <code>fecha_actualizacion</code></p>
+        <p><code>id_producto</code>, <code>nombre</code>, <code>marca</code>, <code>categoria</code>, <code>precio_actual</code>, <code>stock</code>, <code>precio_fabricacion</code>, <code>imagen_url</code></p>
       </div>
       <div class="card-sm">
         <h4>producto_vendedor</h4>
@@ -605,7 +605,7 @@
         <tr><td><code>construir_columnas_seleccion_producto()</code></td><td>Consulta las columnas que realmente existen en la tabla PRODUCTOS (porque pueden variar). Así el código nunca falla si falta una columna opcional.</td></tr>
         <tr><td><code>listar_productos(pagina, tamano)</code></td><td><code>SELECT ... OFFSET :offset ROWS FETCH NEXT :tamano ROWS ONLY</code> — paginación nativa de Oracle.</td></tr>
         <tr><td><code>crear_producto(producto, id_vendedor)</code></td><td><code>INSERT INTO productos</code> + <code>INSERT INTO producto_vendedor</code> en la misma transacción.</td></tr>
-        <tr><td><code>obtener_firma_catalogo_similitud()</code></td><td><code>SELECT COUNT(*), MAX(fecha_actualizacion)</code> — devuelve un "sello" que cambia cuando el catálogo se modifica, usado para invalidar el caché del recomendador.</td></tr>
+        <tr><td><code>obtener_firma_catalogo_similitud()</code></td><td><code>SELECT COUNT(*)</code> — devuelve el conteo de productos como "sello" para invalidar el caché del recomendador.</td></tr>
         <tr><td><code>cargar_catalogo_similitud(firma)</code></td><td>Carga TODOS los productos (nombre+marca+categoria+precio) para entrenar el TF-IDF.</td></tr>
       </tbody>
     </table>
@@ -829,7 +829,7 @@ precio = <span class="fn">Σ</span>(precio_i × similitud_i) / <span class="fn">
 
     <h3>Paso 6 — Caché inteligente (Singleton + firma)</h3>
     <pre><span class="kw">def</span> <span class="fn">_asegurar_indice</span>(self):
-    <span class="cm"># Obtiene (conteo_productos, max_fecha_actualizacion)</span>
+    <span class="cm"># Obtiene conteo_productos para invalidar caché del recomendador</span>
     firma = db.<span class="fn">obtener_firma_catalogo_similitud</span>()
 
     <span class="kw">if</span> self._firma == firma <span class="kw">and</span> self._vectorizador <span class="kw">is not None</span>:

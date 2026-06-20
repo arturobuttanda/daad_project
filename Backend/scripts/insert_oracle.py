@@ -80,11 +80,10 @@ USING dual ON (p.id_producto = :id_producto)
 WHEN MATCHED THEN
   UPDATE SET p.nombre = :nombre,
              p.categoria = :categoria,
-             p.precio_actual = :precio_actual,
-             p.fecha_actualizacion = CURRENT_TIMESTAMP
+             p.precio_actual = :precio_actual
 WHEN NOT MATCHED THEN
-  INSERT (id_producto, nombre, categoria, precio_actual, fecha_actualizacion)
-  VALUES (:id_producto, :nombre, :categoria, :precio_actual, CURRENT_TIMESTAMP)
+  INSERT (id_producto, nombre, categoria, precio_actual)
+  VALUES (:id_producto, :nombre, :categoria, :precio_actual)
 """
 
 # Upsert para la tabla HISTORIAL_PRECIOS

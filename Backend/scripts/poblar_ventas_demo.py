@@ -217,8 +217,7 @@ def generar_ventas_demo(cursor, clientes, productos):
 
                 # Actualizar stock
                 cursor.execute(
-                    "UPDATE productos SET stock = stock - :cantidad, "
-                    "fecha_actualizacion = :fecha "
+                    "UPDATE productos SET stock = stock - :cantidad "
                     "WHERE id_producto = :id_producto",
                     {
                         "cantidad": cantidad,

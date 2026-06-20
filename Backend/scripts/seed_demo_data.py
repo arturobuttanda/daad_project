@@ -199,7 +199,6 @@ def asegurar_columnas_producto(cursor):
         "ALTER TABLE productos ADD (marca VARCHAR2(150))",
         "ALTER TABLE productos ADD (stock NUMBER(10) DEFAULT 0 NOT NULL)",
         "ALTER TABLE productos ADD (precio_fabricacion NUMBER(10, 2))",
-        "ALTER TABLE productos ADD (fecha_caducidad DATE)",
     ]:
         cursor.execute(
             f"""
@@ -230,7 +229,7 @@ def rellenar_inventario(cursor):
         )
 
         cursor.execute(
-            "UPDATE productos SET stock = :stock, precio_fabricacion = :precio_fabricacion, fecha_actualizacion = CURRENT_TIMESTAMP "
+            "UPDATE productos SET stock = :stock, precio_fabricacion = :precio_fabricacion "
             "WHERE id_producto = :id_producto",
             {
                 "stock": next_stock,
@@ -384,7 +383,7 @@ def generar_ventas_demo(cursor, client_rows):
                 total_amount += subtotal
                 total_units += quantity
                 cursor.execute(
-                    "UPDATE productos SET stock = stock - :cantidad, fecha_actualizacion = CURRENT_TIMESTAMP "
+                    "UPDATE productos SET stock = stock - :cantidad "
                     "WHERE id_producto = :id_producto",
                     {"cantidad": quantity, "id_producto": product_id},
                 )

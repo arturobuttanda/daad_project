@@ -87,11 +87,10 @@ WHEN MATCHED THEN
   UPDATE SET
     p.nombre = :nombre,
     p.categoria = :categoria,
-    p.precio_actual = :precio_actual,
-    p.fecha_actualizacion = :fecha_actualizacion
+    p.precio_actual = :precio_actual
 WHEN NOT MATCHED THEN
-  INSERT (id_producto, nombre, categoria, precio_actual, fecha_actualizacion)
-  VALUES (:id_producto, :nombre, :categoria, :precio_actual, :fecha_actualizacion)
+  INSERT (id_producto, nombre, categoria, precio_actual)
+  VALUES (:id_producto, :nombre, :categoria, :precio_actual)
 """
 
 
@@ -224,7 +223,7 @@ def leer_productos_csv(ruta_csv: Path) -> list[dict[str, Any]]:
     registros: list[dict[str, Any]] = []
     with ruta_csv.open("r", encoding="utf-8-sig", newline="") as archivo:
         lector = csv.DictReader(archivo)
-        columnas_requeridas = {"ID_PRODUCTO", "NOMBRE", "CATEGORIA", "PRECIO_ACTUAL", "FECHA_ACTUALIZACION"}
+        columnas_requeridas = {"ID_PRODUCTO", "NOMBRE", "CATEGORIA", "PRECIO_ACTUAL"}
         faltantes = columnas_requeridas - set(lector.fieldnames or [])
         if faltantes:
             raise ValueError(f"Faltan columnas en {ruta_csv.name}: {', '.join(sorted(faltantes))}")
@@ -236,7 +235,6 @@ def leer_productos_csv(ruta_csv: Path) -> list[dict[str, Any]]:
                     "nombre": normalizar_texto(fila["NOMBRE"]),
                     "categoria": normalizar_texto(fila["CATEGORIA"]),
                     "precio_actual": parsear_numero(fila["PRECIO_ACTUAL"]),
-                    "fecha_actualizacion": parsear_timestamp(fila["FECHA_ACTUALIZACION"]),
                 }
             )
 

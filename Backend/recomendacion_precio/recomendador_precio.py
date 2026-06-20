@@ -84,7 +84,7 @@ class RecomendadorPrecio:
         self._modelo: SentenceTransformer | None = None
         self._embeddings: np.ndarray | None = None       
         self._catalogo: list[dict[str, Any]] = []
-        self._firma: tuple[int, str] | None = None
+        self._firma: int | None = None
         self._candado = threading.Lock()
 
     # ------------------------------------------------------------------
@@ -131,7 +131,7 @@ class RecomendadorPrecio:
             firma = db.obtener_firma_catalogo_similitud()
             if self._firma == firma and self._embeddings is not None:
                 return
-            catalogo = db.cargar_catalogo_similitud(firma)
+            catalogo = db.cargar_catalogo_similitud()
             self._construir_embeddings(catalogo)
             self._firma = firma
     def _calcular_similitudes( self, documento_objetivo: str) -> np.ndarray:

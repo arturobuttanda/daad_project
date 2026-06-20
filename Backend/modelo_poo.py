@@ -188,7 +188,6 @@ class Producto:
     stock: int,
     precio_fabricacion: float | None,
     imagen_url: str | None = None,
-    fecha_actualizacion: datetime | None = None,
     categoria: str | None = None,
   ):
     self.id_producto = _limpiar_texto(id_producto)
@@ -199,7 +198,6 @@ class Producto:
     self.stock = int(stock)
     self.precio_fabricacion = float(precio_fabricacion) if precio_fabricacion is not None else None
     self.imagen_url = _limpiar_texto(imagen_url) or None
-    self.fecha_actualizacion = fecha_actualizacion
 
   @classmethod
   def desde_dict(cls, datos: dict[str, object | None]) -> "Producto":
@@ -212,7 +210,6 @@ class Producto:
       stock=int(datos.get("stock") or 0),
       precio_fabricacion=_normalizar_float(datos.get("precio_fabricacion")),
       imagen_url=datos.get("imagen_url") if datos.get("imagen_url") is not None else None,
-      fecha_actualizacion=_parse_fecha_historica(datos.get("fecha_actualizacion")) if datos.get("fecha_actualizacion") else None,
       categoria=datos.get("categoria") if datos.get("categoria") is not None else None,
     )
 
@@ -244,7 +241,6 @@ class Producto:
       "stock": self.stock,
       "precio_fabricacion": self.precio_fabricacion,
       "imagen_url": self.imagen_url,
-      "fecha_actualizacion": self.fecha_actualizacion.isoformat() if self.fecha_actualizacion else None,
     }
 
   def a_fila(self) -> dict[str, object | None]:
@@ -257,7 +253,6 @@ class Producto:
       "stock": self.stock,
       "precio_fabricacion": self.precio_fabricacion,
       "imagen_url": self.imagen_url,
-      "fecha_actualizacion": self.fecha_actualizacion,
     }
 
   def actualizar_datos(
@@ -268,7 +263,6 @@ class Producto:
     precio_actual: float | None = None,
     stock: int | None = None,
     precio_fabricacion: float | None = None,
-    fecha_caducidad: Any = None,
     imagen_url: str | None = None,
   ) -> None:
     """Actualiza los datos del producto."""
@@ -289,7 +283,6 @@ class Producto:
       self.precio_fabricacion = precio_fab_limpio
     if imagen_url is not None:
       self.imagen_url = _limpiar_texto(imagen_url) or None
-    self.fecha_actualizacion = datetime.utcnow()
 
 
 
@@ -376,7 +369,6 @@ class Informe:
     total_clientes: int = 0,
     total_ventas: int = 0,
     productos_stock_bajo: int = 0,
-    productos_estancados: int = 0,
   ):
     self.ingresos_totales = float(ingresos_totales)
     self.costos_totales = float(costos_totales)
@@ -387,7 +379,6 @@ class Informe:
     self.total_clientes = int(total_clientes)
     self.total_ventas = int(total_ventas)
     self.productos_stock_bajo = int(productos_stock_bajo)
-    self.productos_estancados = int(productos_estancados)
 
   @classmethod
   def desde_agregados_bd(
@@ -400,7 +391,6 @@ class Informe:
     total_clientes: int = 0,
     total_ventas: int = 0,
     productos_stock_bajo: int = 0,
-    productos_estancados: int = 0,
   ) -> "Informe":
     """Construye un Informe directamente a partir de agregados de base de datos."""
     margen = float(ingresos_totales) - float(costos_totales)
@@ -414,7 +404,6 @@ class Informe:
       total_clientes=total_clientes,
       total_ventas=total_ventas,
       productos_stock_bajo=productos_stock_bajo,
-      productos_estancados=productos_estancados,
     )
 
   def a_diccionario(self) -> dict[str, object | None]:
@@ -428,7 +417,6 @@ class Informe:
       "total_clientes": self.total_clientes,
       "total_ventas": self.total_ventas,
       "productos_stock_bajo": self.productos_stock_bajo,
-      "productos_estancados": self.productos_estancados,
     }
 
 

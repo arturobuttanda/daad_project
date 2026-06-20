@@ -109,7 +109,6 @@ class SolicitudCrearProducto(BaseModel):
   precio_actual: float | None = None
   stock: int = 0
   precio_fabricacion: float | None = None
-  fecha_caducidad: date | None = None
   imagen_url: str | None = None
   id_vendedor: str | None = None
 
@@ -121,7 +120,6 @@ class SolicitudActualizarProducto(BaseModel):
   precio_actual: float | None = None
   stock: int | None = None
   precio_fabricacion: float | None = None
-  fecha_caducidad: date | None = None
   imagen_url: str | None = None
 
 
@@ -299,7 +297,7 @@ def exportar_ventas_csv(period: str = Query("all"), id_vendedor: str | None = Qu
 
 
 COLUMNAS_BASE_PRODUCTO = ["id_producto", "nombre", "categoria", "precio_actual"]
-COLUMNAS_OPCIONALES_PRODUCTO = ["marca", "stock", "precio_fabricacion", "fecha_caducidad", "imagen_url", "fecha_actualizacion"]
+COLUMNAS_OPCIONALES_PRODUCTO = ["marca", "stock", "precio_fabricacion", "imagen_url"]
 
 
 @lru_cache(maxsize=1)
@@ -892,7 +890,7 @@ def listar_productos_cliente(
   consulta_conteo = f"SELECT COUNT(*) FROM productos p{clausula_where}"
   consulta_lista = (
     "SELECT p.id_producto, p.nombre, p.marca, p.categoria, p.precio_actual, p.stock, "
-    "p.precio_fabricacion, p.fecha_actualizacion, u.nombre AS vendedor_nombre, v.codigo_vendedor "
+    "p.precio_fabricacion, u.nombre AS vendedor_nombre, v.codigo_vendedor "
     "FROM productos p "
     "LEFT JOIN producto_vendedor pv ON pv.id_producto = p.id_producto "
     "LEFT JOIN vendedores v ON v.id_vendedor = pv.id_vendedor "
@@ -924,10 +922,10 @@ def listar_productos_cliente(
   for fila in filas:
     producto = Producto.desde_fila(
       fila,
-      ["id_producto", "nombre", "marca", "categoria", "precio_actual", "stock", "precio_fabricacion", "fecha_actualizacion"],
+      ["id_producto", "nombre", "marca", "categoria", "precio_actual", "stock", "precio_fabricacion"],
     )
     producto_dict = producto.a_diccionario()
-    producto_dict.update({"vendedor_nombre": fila[8], "codigo_vendedor": fila[9]})
+    producto_dict.update({"vendedor_nombre": fila[7], "codigo_vendedor": fila[8]})
     items.append(producto_dict)
 
   return _paginar_respuesta(items, total_items, pagina_actual, page_size)
@@ -1082,7 +1080,6 @@ def obtener_indicadores_financieros(id_vendedor: str | None = None):
     total_clientes=int(indicadores["total_clientes"]),
     total_ventas=int(indicadores["total_ventas"]),
     productos_stock_bajo=int(indicadores["productos_stock_bajo"]),
-    productos_estancados=int(indicadores["productos_estancados"]),
   )
 
   ganancia = informe.margen_ganancia
@@ -1098,7 +1095,6 @@ def obtener_indicadores_financieros(id_vendedor: str | None = None):
     "profit": round(ganancia, 2),
     "margin_percent": porcentaje_margen,
     "low_stock_products": informe.productos_stock_bajo,
-    "stagnant_products": informe.productos_estancados,
   }
 
 

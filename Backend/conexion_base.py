@@ -48,7 +48,7 @@ if not ubicacion_wallet.is_absolute():
     ubicacion_wallet = (RUTA_RAIZ / ubicacion_wallet).resolve()
 
 COLUMNAS_BASE_PRODUCTO = ["id_producto", "nombre", "categoria", "precio_actual"]
-COLUMNAS_OPCIONALES_PRODUCTO = ["marca", "stock", "precio_fabricacion", "fecha_caducidad", "imagen_url", "fecha_actualizacion"]
+COLUMNAS_OPCIONALES_PRODUCTO = ["marca", "stock", "precio_fabricacion", "imagen_url"]
 
 
 class BaseDatosNoEncontrada(Exception):
@@ -175,7 +175,7 @@ class BaseOracle:
                 offset = (pagina_actual - 1) * tamano_pagina
                 cursor.execute(
                     f"SELECT {', '.join(columnas_seleccion)} FROM productos "
-                    f"ORDER BY fecha_actualizacion DESC, nombre ASC OFFSET :offset ROWS FETCH NEXT :tamano ROWS ONLY",
+                    f"ORDER BY nombre ASC OFFSET :offset ROWS FETCH NEXT :tamano ROWS ONLY",
                     {"offset": offset, "tamano": tamano_pagina},
                 )
                 filas = cursor.fetchall()
@@ -200,7 +200,7 @@ class BaseOracle:
                     f"SELECT {columnas_sql} FROM productos p "
                     "INNER JOIN producto_vendedor pv ON pv.id_producto = p.id_producto "
                     "WHERE pv.id_vendedor = :id_vendedor "
-                    "ORDER BY p.fecha_actualizacion DESC, p.nombre ASC OFFSET :offset ROWS FETCH NEXT :tamano ROWS ONLY",
+                    "ORDER BY p.nombre ASC OFFSET :offset ROWS FETCH NEXT :tamano ROWS ONLY",
                     {"id_vendedor": id_vendedor, "offset": offset, "tamano": tamano_pagina},
                 )
                 filas = cursor.fetchall()
@@ -350,15 +350,15 @@ class BaseOracle:
 
 
 
-    def obtener_firma_catalogo_similitud(self) -> tuple[int, str]:
-        """Obtiene la firma del catalogo (conteo + fecha) para cache de similitud."""
+    def obtener_firma_catalogo_similitud(self) -> int:
+        """Obtiene la firma del catalogo (conteo) para cache de similitud."""
         with self.conectar() as conexion:
             with conexion.cursor() as cursor:
-                cursor.execute("SELECT COUNT(*), MAX(fecha_actualizacion) FROM productos")
+                cursor.execute("SELECT COUNT(*) FROM productos")
                 fila = cursor.fetchone()
-        return int(fila[0] or 0), str((fila[1] or datetime.utcnow()).isoformat())
+        return int(fila[0] or 0)
 
-    def cargar_catalogo_similitud(self, firma: tuple[int, str]) -> list[dict[str, object | None]]:
+    def cargar_catalogo_similitud(self) -> list[dict[str, object | None]]:
         """Carga todo el catalogo de productos para calculos de similitud."""
         columnas_seleccion = self.construir_columnas_seleccion_producto()
         with self.conectar() as conexion:
@@ -547,7 +547,7 @@ class BaseOracle:
                     )
 
                     cursor.execute(
-                        "UPDATE productos SET stock = :stock, fecha_actualizacion = CURRENT_TIMESTAMP "
+                        "UPDATE productos SET stock = :stock "
                         "WHERE id_producto = :id_producto",
                         {"stock": stock_restante, "id_producto": id_producto},
                     )
@@ -834,17 +834,6 @@ class BaseOracle:
                     cursor.execute("SELECT COUNT(*) FROM productos WHERE stock <= 10")
                 stock_bajo = int(cursor.fetchone()[0] or 0)
 
-                if id_vendedor:
-                    cursor.execute(
-                        "SELECT COUNT(*) FROM productos p "
-                        "INNER JOIN producto_vendedor pv ON pv.id_producto = p.id_producto "
-                        "WHERE pv.id_vendedor = :id_vendedor AND p.fecha_actualizacion < (CURRENT_DATE - 30)",
-                        {"id_vendedor": id_vendedor},
-                    )
-                else:
-                    cursor.execute("SELECT COUNT(*) FROM productos WHERE fecha_actualizacion < (CURRENT_DATE - 30)")
-                estancados = int(cursor.fetchone()[0] or 0)
-
         return {
             "total_productos": total_productos,
             "total_vendedores": total_vendedores,
@@ -853,7 +842,6 @@ class BaseOracle:
             "ingresos_totales": ingresos,
             "costos_totales": costo_total,
             "productos_stock_bajo": stock_bajo,
-            "productos_estancados": estancados,
         }
 
     def obtener_ventas_mensuales(self, id_vendedor=None, meses=6):
