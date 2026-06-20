@@ -335,16 +335,22 @@ class BaseOracle:
             "especialidad": fila[3],
         }
 
-    def obtener_historial_precios(self, id_producto: str, limite: int = 12) -> list[dict[str, object]]:
-        """Obtiene el historial de precios de un producto."""
+    def obtener_historial_precios(
+        self, id_producto: str, fecha_inicio: str | None = None, fecha_fin: str | None = None
+    ) -> list[dict[str, object]]:
+        """Obtiene el historial de precios de un producto, opcionalmente filtrado por periodo."""
         with self.conectar() as conexion:
             with conexion.cursor() as cursor:
-                cursor.execute(
-                    "SELECT fecha, precio_registrado FROM historial_precios "
-                    "WHERE id_producto = :id_producto "
-                    "ORDER BY fecha DESC FETCH NEXT :limite ROWS ONLY",
-                    {"id_producto": id_producto, "limite": limite},
-                )
+                sql = "SELECT fecha, precio_registrado FROM historial_precios WHERE id_producto = :id_producto"
+                params: dict[str, object] = {"id_producto": id_producto}
+                if fecha_inicio:
+                    sql += " AND fecha >= TO_DATE(:fecha_inicio, 'YYYY-MM-DD')"
+                    params["fecha_inicio"] = fecha_inicio
+                if fecha_fin:
+                    sql += " AND fecha <= TO_DATE(:fecha_fin, 'YYYY-MM-DD')"
+                    params["fecha_fin"] = fecha_fin
+                sql += " ORDER BY fecha ASC"
+                cursor.execute(sql, params)
                 filas = cursor.fetchall()
         return [{"fecha": fila[0].isoformat() if fila[0] else None, "precio": float(fila[1])} for fila in filas]
 
@@ -893,6 +899,43 @@ class BaseOracle:
                 "ventas": int(total_ventas or 0),
             })
         return resultados
+
+    def obtener_productos_estancados(self, id_vendedor=None, limite=10):
+        """Obtiene los productos con menor rotacion (menos vendidos)."""
+        with self.conectar() as conexion:
+            with conexion.cursor() as cursor:
+                if id_vendedor:
+                    cursor.execute(
+                        "SELECT p.id_producto, p.nombre, COALESCE(SUM(d.cantidad), 0) AS total_vendido "
+                        "FROM productos p "
+                        "INNER JOIN producto_vendedor pv ON pv.id_producto = p.id_producto "
+                        "LEFT JOIN venta_detalle d ON d.id_producto = p.id_producto "
+                        "LEFT JOIN ventas v ON v.id_venta = d.id_venta AND v.id_vendedor = :id_vendedor "
+                        "WHERE pv.id_vendedor = :id_vendedor2 "
+                        "GROUP BY p.id_producto, p.nombre "
+                        "ORDER BY total_vendido ASC "
+                        "FETCH NEXT :limite ROWS ONLY",
+                        {"id_vendedor": id_vendedor, "id_vendedor2": id_vendedor, "limite": limite},
+                    )
+                else:
+                    cursor.execute(
+                        "SELECT p.id_producto, p.nombre, COALESCE(SUM(d.cantidad), 0) AS total_vendido "
+                        "FROM productos p "
+                        "LEFT JOIN venta_detalle d ON d.id_producto = p.id_producto "
+                        "GROUP BY p.id_producto, p.nombre "
+                        "ORDER BY total_vendido ASC "
+                        "FETCH NEXT :limite ROWS ONLY",
+                        {"limite": limite},
+                    )
+                filas = cursor.fetchall()
+        return [
+            {
+                "id_producto": fila[0],
+                "nombre": fila[1],
+                "total_vendido": int(fila[2]),
+            }
+            for fila in filas
+        ]
 
     def obtener_top_productos_vendedor(self, id_vendedor=None, limite=10):
         """Obtiene los productos mas vendidos por ingresos totales."""

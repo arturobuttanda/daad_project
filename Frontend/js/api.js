@@ -81,8 +81,13 @@ const Api = {
     return eventoFetch(url);
   },
 
-  obtenerDetalleProducto(idProducto) {
-    return eventoFetch(`${BACKEND_URL}/api/cliente/productos/${encodeURIComponent(idProducto)}`);
+  obtenerDetalleProducto(idProducto, fechaInicio = null, fechaFin = null) {
+    let url = `${BACKEND_URL}/api/cliente/productos/${encodeURIComponent(idProducto)}`;
+    const params = [];
+    if (fechaInicio) params.push(`fecha_inicio=${encodeURIComponent(fechaInicio)}`);
+    if (fechaFin) params.push(`fecha_fin=${encodeURIComponent(fechaFin)}`);
+    if (params.length) url += '?' + params.join('&');
+    return eventoFetch(url);
   },
 
   realizarCompra(idCliente, items, idVendedor = null) {
@@ -124,6 +129,12 @@ const Api = {
 
   obtenerTopProductos(idVendedor = null, limite = 10) {
     let url = `${BACKEND_URL}/api/vendedor/reportes/top-productos?limite=${limite}`;
+    if (idVendedor) url += `&id_vendedor=${encodeURIComponent(idVendedor)}`;
+    return eventoFetch(url);
+  },
+
+  obtenerProductosEstancados(idVendedor = null, limite = 10) {
+    let url = `${BACKEND_URL}/api/vendedor/reportes/productos-estancados?limite=${limite}`;
     if (idVendedor) url += `&id_vendedor=${encodeURIComponent(idVendedor)}`;
     return eventoFetch(url);
   },

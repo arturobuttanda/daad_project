@@ -49,7 +49,6 @@
         <div class="tarjeta-estadistica"><div class="valor" style="font-size:1.25rem;" id="valMargen">---</div><div class="etiqueta-est">Margen</div></div>
         <div class="tarjeta-estadistica"><div class="valor" style="font-size:1.25rem;" id="valVentas">---</div><div class="etiqueta-est">Total ventas</div></div>
         <div class="tarjeta-estadistica"><div class="valor" style="font-size:1.25rem;" id="valStockBajo">---</div><div class="etiqueta-est">Stock bajo</div></div>
-        <div class="tarjeta-estadistica"><div class="valor" style="font-size:1.25rem;" id="valEstancados">---</div><div class="etiqueta-est">Estancados</div></div>
       </div>
 
       <!-- GRAFICAS -->
@@ -60,13 +59,7 @@
 
       <div id="graficoTopProductos"></div>
 
-      <!-- RECOMENDACIONES -->
-      <div class="tarjeta-simple" id="seccionRecomendaciones" style="margin-top:1rem;">
-        <h3 style="font-size:1rem; font-weight:700; color:var(--texto); margin-bottom:0.75rem;">Recomendaciones</h3>
-        <div id="listaRecomendaciones">
-          <p style="color:var(--texto-suave); font-size:0.875rem;">Cargando recomendaciones...</p>
-        </div>
-      </div>
+      <div id="graficoEstancados" style="margin-top:1rem;"></div>
     </main>
   </div>
 
@@ -87,9 +80,9 @@
         const datos = await Api.obtenerIndicadoresVendedor(idVendedor);
         datosIndicadores = datos;
         renderizarIndicadores(datos);
-        renderizarRecomendaciones(datos);
         cargarVentasMensuales(idVendedor);
         cargarTopProductos(idVendedor);
+        cargarEstancados(idVendedor);
       } catch (error) {
         mostrarNotificacion("Error al cargar indicadores: " + error.message, "error");
         document.getElementById("valIngresos").textContent = "$0.00";
@@ -98,7 +91,6 @@
         document.getElementById("valMargen").textContent = "0%";
         document.getElementById("valVentas").textContent = "0";
         document.getElementById("valStockBajo").textContent = "0";
-        document.getElementById("valEstancados").textContent = "0";
       }
     }
 
@@ -140,26 +132,23 @@
       document.getElementById("valMargen").textContent = datos.margin_percent + "%";
       document.getElementById("valVentas").textContent = datos.total_sales || 0;
       document.getElementById("valStockBajo").textContent = datos.low_stock_products || 0;
-      document.getElementById("valEstancados").textContent = "0";
     }
 
-    function renderizarRecomendaciones(datos) {
-      const div = document.getElementById("listaRecomendaciones");
-      const recomendaciones = [];
-
-      if (datos.low_stock_products > 0) {
-        recomendaciones.push(`Hay ${datos.low_stock_products} productos con stock bajo. Considera reabastecerlos pronto.`);
+    async function cargarEstancados(idVendedor) {
+      try {
+        const datos = await Api.obtenerProductosEstancados(idVendedor, 10);
+        if (datos.length > 0) {
+          const barras = datos.map(d => ({
+            etiqueta: truncarTexto(d.nombre || d.id_producto, 30),
+            valor: d.total_vendido,
+          }));
+          Graficos.barras("graficoEstancados", barras, "Productos estancados (menor rotacion)");
+        } else {
+          Graficos.barras("graficoEstancados", [], "Productos estancados (sin datos)");
+        }
+      } catch (e) {
+        Graficos.barras("graficoEstancados", [], "Productos estancados (sin datos)");
       }
-      if (datos.margin_percent < 20) {
-        recomendaciones.push(`El margen de ganancia (${datos.margin_percent}%) esta por debajo del recomendado. Revisa tus precios.`);
-      }
-      if (recomendaciones.length === 0) {
-        recomendaciones.push("No hay recomendaciones pendientes. El sistema se encuentra en buen estado.");
-      }
-
-      div.innerHTML = recomendaciones.map((r) =>
-        `<p style="font-size:0.875rem; color:var(--texto); padding:0.5rem 0; border-bottom:1px solid var(--borde-suave);">• ${r}</p>`
-      ).join("");
     }
 
     function descargarCSV() {

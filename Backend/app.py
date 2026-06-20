@@ -343,9 +343,11 @@ def consultar_producto_por_id(id_producto: str) -> dict[str, object | None] | No
   return producto.a_diccionario()
 
 
-def obtener_historial_precios(id_producto: str, limite: int = 12) -> list[dict[str, object]]:
+def obtener_historial_precios(
+  id_producto: str, fecha_inicio: str | None = None, fecha_fin: str | None = None
+) -> list[dict[str, object]]:
   try:
-    return db.obtener_historial_precios(id_producto, limite)
+    return db.obtener_historial_precios(id_producto, fecha_inicio, fecha_fin)
   except Exception as exc:
     bitacora.exception("Error al consultar historial de precios: %s", exc)
     raise HTTPException(
@@ -932,11 +934,17 @@ def listar_productos_cliente(
 
 
 @app.get("/api/cliente/productos/{product_id}")
-def obtener_producto_cliente(product_id: str):
-  return construir_detalle_producto_cliente(normalizar_id_producto(product_id))
+def obtener_producto_cliente(
+  product_id: str,
+  fecha_inicio: str | None = Query(None),
+  fecha_fin: str | None = Query(None),
+):
+  return construir_detalle_producto_cliente(normalizar_id_producto(product_id), fecha_inicio, fecha_fin)
 
 
-def construir_detalle_producto_cliente(id_producto: str) -> dict[str, object | None]:
+def construir_detalle_producto_cliente(
+  id_producto: str, fecha_inicio: str | None = None, fecha_fin: str | None = None
+) -> dict[str, object | None]:
   producto = consultar_producto_por_id(id_producto)
   if not producto:
     raise HTTPException(
@@ -944,7 +952,7 @@ def construir_detalle_producto_cliente(id_producto: str) -> dict[str, object | N
       detail="El producto no existe.",
     )
 
-  historial = obtener_historial_precios(id_producto, limite=100)
+  historial = obtener_historial_precios(id_producto, fecha_inicio, fecha_fin)
   vendedor = obtener_vendedor_producto(id_producto)
   recomendacion = calcular_recomendacion_precio_app(producto, historial)
 
@@ -1107,6 +1115,19 @@ def obtener_ventas_mensuales_api(id_vendedor: str | None = None, meses: int = 6)
     raise HTTPException(
       status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
       detail="No se pudieron obtener las ventas mensuales.",
+    )
+  return datos
+
+
+@app.get("/api/vendedor/reportes/productos-estancados")
+def obtener_productos_estancados_api(id_vendedor: str | None = None, limite: int = 10):
+  try:
+    datos = db.obtener_productos_estancados(id_vendedor, limite)
+  except Exception as exc:
+    bitacora.exception("Error al obtener productos estancados: %s", exc)
+    raise HTTPException(
+      status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+      detail="No se pudieron obtener los productos estancados.",
     )
   return datos
 
