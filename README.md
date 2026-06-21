@@ -6,33 +6,95 @@ Plataforma de comercio electrónico con análisis de precios, recomendación bas
 
 ## Arquitectura
 
-```
-┌─────────────────────────────────────────────────────────────┐
-│  Frontend (HTML estático — http.server :5180)               │
-│  ┌──────────┐  ┌──────────┐  ┌──────────┐  ┌────────────┐ │
-│  │Login/Reg │  │Marketplace│  │Producto  │  │Panel       │ │
-│  │          │  │(Catálogo) │  │(Detalle+ │  │Vendedor    │ │
-│  │          │  │           │  │Gráficas) │  │(Reportes)  │ │
-│  └──────────┘  └──────────┘  └──────────┘  └────────────┘ │
-│                    ↕ fetch (JSON)                           │
-│              js/api.js + js/utilerias.js                    │
-└──────────────────────┬──────────────────────────────────────┘
-                       │ HTTP :8000
-┌──────────────────────▼──────────────────────────────────────┐
-│  Backend (FastAPI — uvicorn :8000)                          │
-│  app.py                   → Rutas y lógica de endpoints      │
-│  conexion_base.py         → Capa de persistencia Oracle      │
-│  modelo_poo.py            → Clases del dominio (POO)         │
-│  recomendacion_precio/    → Recomendador TF-IDF semántico    │
-│  scripts/                 → DDL, seed, importación CSV       │
-└──────────────────────┬──────────────────────────────────────┘
-                       │ Oracle Wallet (mTLS)
-┌──────────────────────▼──────────────────────────────────────┐
-│  Oracle Autonomous Database                                  │
-│  USUARIOS | PRODUCTOS | VENTAS | VENTA_DETALLE              │
-│  VENDEDORES | CLIENTES | HISTORIAL_PRECIOS                  │
-│  PRODUCTO_VENDEDOR                                           │
-└─────────────────────────────────────────────────────────────┘
+```mermaid
+flowchart TB
+
+    RUN["run.py<br/>Lanzador Unificado"]
+
+    RUN --> FRONT
+    RUN --> BACK
+
+    subgraph FRONT["Frontend (HTML + CSS + JavaScript)"]
+
+        LOGIN["Login / Registro"]
+        MARKET["Marketplace<br/>Catálogo de Productos"]
+        PRODUCTO["Detalle de Producto<br/>Historial y Gráficas"]
+        CLIENTE["Panel Cliente<br/>Carrito y Compras"]
+        VENDEDORUI["Panel Vendedor<br/>Inventario y Reportes"]
+
+        FETCH["Fetch API<br/>(HTTP + JSON)"]
+
+        LOGIN --> FETCH
+        MARKET --> FETCH
+        PRODUCTO --> FETCH
+        CLIENTE --> FETCH
+        VENDEDORUI --> FETCH
+
+    end
+
+    FETCH <--> |HTTP / JSON| API
+
+    subgraph BACK["Backend (FastAPI + Uvicorn)"]
+
+        API["Endpoints REST<br/>GET · POST · PUT · DELETE"]
+
+        subgraph POO["Modelo de Dominio (POO)"]
+
+            PERSONA["Persona"]
+            CLIENTEPOO["Cliente"]
+            VENDEDORPOO["Vendedor"]
+            PRODUCTOPOO["Producto"]
+            VENTA["Venta"]
+            INFORME["Informe"]
+
+            PERSONA --> CLIENTEPOO
+            PERSONA --> VENDEDORPOO
+
+        end
+
+        RECOMENDADOR["Recomendador de Precios<br/>Embeddings + Similitud Coseno"]
+
+        PERSISTENCIA["conexion_base.py<br/>Pool Oracle + Cursores"]
+
+        API --> POO
+        API --> RECOMENDADOR
+
+        POO --> PERSISTENCIA
+        RECOMENDADOR --> PERSISTENCIA
+
+    end
+
+    PERSISTENCIA <--> |Oracle Wallet mTLS| ORACLE
+
+    subgraph DB["Oracle Autonomous Database"]
+
+        ORACLE["Oracle Database"]
+
+        USUARIOS["USUARIOS"]
+        CLIENTESDB["CLIENTES"]
+        VENDEDORESDB["VENDEDORES"]
+
+        PRODUCTOS["PRODUCTOS"]
+        PRODUCTOVENDEDOR["PRODUCTO_VENDEDOR"]
+
+        VENTAS["VENTAS"]
+        VENTADETALLE["VENTA_DETALLE"]
+
+        HISTORIAL["HISTORIAL_PRECIOS"]
+
+        ORACLE --- USUARIOS
+        ORACLE --- CLIENTESDB
+        ORACLE --- VENDEDORESDB
+
+        ORACLE --- PRODUCTOS
+        ORACLE --- PRODUCTOVENDEDOR
+
+        ORACLE --- VENTAS
+        ORACLE --- VENTADETALLE
+
+        ORACLE --- HISTORIAL
+
+    end
 ```
 
 ---
@@ -49,57 +111,39 @@ Plataforma de comercio electrónico con análisis de precios, recomendación bas
 ### 1. Clonar el repositorio
 
 ```bash
-git clone <url-del-repositorio> nexusmarket
-cd nexusmarket
+git clone <https://github.com/arturobuttanda/daad_project.git> nexusmarket
 ```
 
 ### 2. Configurar variables de entorno
 
-Copia el archivo de ejemplo y completa los valores de tu base de datos Oracle:
-
-```bash
-cp .env.example .env
-```
-
-Edita `.env` con tus credenciales:
+El env es donde deben de estar las credenciales, en principio no deberia de haber problema porque no puse el env en el git ignore, pero si da problemas entonces solo es crear un archivo .env en la raiz del directorio y colocar
 
 ```env
-DB_USER=ADMIN
-DB_PASSWORD=tu_contraseña
-DB_DSN=nombre_de_tu_db_high
-WALLET_LOCATION=wallet/Wallet_TU_WALLET
-WALLET_PASSWORD=tu_password_wallet
-FRONTEND_URL=http://localhost:5180
+DB_USER="ADMIN"
+DB_PASSWORD="Bufalo4135241352"
+DB_DSN="e8x9v8j6g8i1m0ms_low"
+WALLET_PATH="Backend/ConexionDB/Wallet"
+WALLET_PASSWORD="Bufalo4135241352"
+FRONTEND_URL="http://localhost:5180"
 ```
 
-### 3. Colocar el wallet de Oracle
 
-Descarga y descomprime el wallet ZIP de tu ADB dentro de `wallet/`. La estructura debe ser:
+### 3. Base de datos
 
-```
-wallet/
-  Wallet_TU_WALLET/
-    tnsnames.ora
-    ewallet.p12
-    keystore.jks
-    ...
-```
+La base de datos que se ocupa es la de Oracle Autonomous Database, la conexion esta dentro de del Backend/ConexionDB
+las credenciales de la base ya se encuentran en dentro de la carpeta en Wallet, deben ser los archivos:
 
-### 4. Inicializar la base de datos
-
-Ejecuta el script SQL para crear las tablas:
-
-```bash
-# Opción A: Desde SQL*Net / SQL Developer, ejecuta:
-Backend/scripts/schema.sql
-
-# Opción B: Usando el script seed (crea tablas + datos demo):
-python Backend/scripts/seed_demo_data.py
-```
-
-El script `seed_demo_data.py` crea las tablas, inserts datos de ejemplo (productos, vendedores, clientes, historial de precios) y es la opción recomendada para desarrollo/pruebas.
-
-### 5. Iniciar la aplicación
+ Wallet/
+  cwallet.sso
+  ewallet.p12
+  ewallet.pem
+  keystore.jks
+  ojdbc.properties
+  README
+  sqlnet.ora
+  transnames.ora
+  truststore.jks
+### 4. Iniciar la aplicación
 
 Ejecuta el lanzador desde la raíz del proyecto:
 
@@ -115,25 +159,28 @@ Esto:
 5. Inicia un servidor de archivos estáticos para el frontend en `:5180`
 6. Abre el navegador en la página de inicio de sesión
 
-### 6. Acceder
+### 5. Acceder
 
 | Componente | URL |
 |---|---|
 | Frontend | http://127.0.0.1:5180/iniciar-sesion.html |
 | Backend API | http://127.0.0.1:8000 |
-| Documentación interactiva | http://127.0.0.1:8000/docs |
 
-### Inicio manual (sin run.py)
+Se debe de acceder a la url del fronted
 
-```bash
-# Backend
-uvicorn Backend.app:app --reload --host 0.0.0.0 --port 8000
-
-# Frontend (otra terminal)
-python -m http.server 5180 --directory Frontend
+Dentro del fronted lo primero que veremos sera la estructura del login, ahi se puede registrar un nuevo usuario como vendedor o cliente, pero esos nuevos vendedores van a estar vacios, y hay que poblarlos para poder probar algunas funcionalidades de analisis, por eso recomiendo que se ingresen las siguientes credenciales:
 ```
+Vendedor
+nombre: Pablo Marmol
+correo: pablomarmol@gmail.com
+contrasena: "C0ntraseña"
 
----
+Cliente
+nombre: Pedro PicaPiedra
+correo: 
+pedropp@gmail.com
+contrasena: "C0ntraseña"
+```
 
 ## Estructura del proyecto
 
@@ -237,27 +284,76 @@ NexusMarket/
 
 ## Esquema de base de datos
 
+```mermaid
+erDiagram
+
+    USUARIOS {
+        VARCHAR2 id_usuario PK
+        VARCHAR2 nombre
+        VARCHAR2 telefono
+        VARCHAR2 correo UK
+        VARCHAR2 tipo_usuario
+        VARCHAR2 password_hash
+        TIMESTAMP fecha_creacion
+    }
+
+    VENDEDORES {
+        VARCHAR2 id_vendedor PK
+        VARCHAR2 codigo_vendedor UK
+        VARCHAR2 especialidad
+        NUMBER objetivo_ventas
+        TIMESTAMP fecha_alta
+    }
+
+    PRODUCTOS {
+        VARCHAR2 id_producto PK
+        VARCHAR2 nombre
+        VARCHAR2 marca
+        VARCHAR2 categoria
+        NUMBER precio_actual
+        NUMBER stock
+        NUMBER precio_fabricacion
+    }
+
+    PRODUCTO_VENDEDOR {
+        VARCHAR2 id_producto PK,FK
+        VARCHAR2 id_vendedor FK
+        TIMESTAMP fecha_asignacion
+    }
+
+    VENTAS {
+        VARCHAR2 id_venta PK
+        VARCHAR2 id_cliente FK
+        TIMESTAMP fecha_venta
+        NUMBER monto_total
+        NUMBER total_unidades
+    }
+
+    VENTA_DETALLE {
+        VARCHAR2 id_venta PK,FK
+        VARCHAR2 id_producto PK,FK
+        NUMBER cantidad
+        NUMBER precio_unitario
+        NUMBER costo_unitario
+        NUMBER subtotal
+        NUMBER margen_unitario
+        VARCHAR2 id_vendedor FK
+    }
+
+    USUARIOS ||--o| VENDEDORES : "es vendedor"
+
+    USUARIOS ||--o{ VENTAS : "realiza"
+
+    VENDEDORES ||--o{ PRODUCTO_VENDEDOR : "administra"
+
+    PRODUCTOS ||--o{ PRODUCTO_VENDEDOR : "asignado"
+
+    VENTAS ||--o{ VENTA_DETALLE : "contiene"
+
+    PRODUCTOS ||--o{ VENTA_DETALLE : "vendido"
+
+    VENDEDORES ||--o{ VENTA_DETALLE : "vende"
 ```
-USUARIOS (id_usuario PK, nombre, telefono, correo, tipo_usuario, password_hash)
-  ├── CLIENTES (id_cliente PK FK→USUARIOS, ...)
-  ├── VENDEDORES (id_vendedor PK FK→USUARIOS, codigo_vendedor, ...)
-  └── VENTAS (id_venta PK, id_cliente FK→USUARIOS, monto_total, total_unidades, fecha_venta)
-        └── VENTA_DETALLE (id_venta FK, id_producto FK, id_vendedor FK→VENDEDORES,
-                           cantidad, precio_unitario, subtotal, ...)
-
-PRODUCTOS (id_producto PK, nombre, marca, categoria, precio_actual, stock, ...)
-  └── PRODUCTO_VENDEDOR (id_producto FK, id_vendedor FK) — relación N:M
-  └── HISTORIAL_PRECIOS (id_producto FK, precio, fecha)
-
-HISTORIAL_PRECIOS_RAW — respaldo del historial original con outliers incluidos
-```
-
-### Detalles clave
-
-- `VENTA_DETALLE.id_vendedor` (FK → `VENDEDORES` ON DELETE SET NULL): cada item de venta se asigna al vendedor que lo publicó, permitiendo reportes por vendedor incluso en compras multi-vendedor.
-- `VENTAS` ya no tiene `id_vendedor` — el revenue por vendedor se calcula desde `VENTA_DETALLE`.
-- `HISTORIAL_PRECIOS` contiene datos limpios (sin outliers). `HISTORIAL_PRECIOS_RAW` conserva los datos originales.
-- El pool de conexión Oracle usa `timeout=30s`, `wait_timeout=5000ms`, `max_lifetime_session=600s`.
 
 ---
 
@@ -305,7 +401,7 @@ Registrar Cliente ───→ Marketplace ──→ Carrito ──→ Compra
                                               Historial (Ticket)
 ```
 
-### 2. Demostración paso a paso
+### 2. Pruebas recomendadas que hacer para probar el proyecto :)
 
 **A. Registrar un vendedor**
 1. Ir a `/registrarse.html`, seleccionar "Vendedor", llenar datos.
@@ -333,29 +429,6 @@ Registrar Cliente ───→ Marketplace ──→ Carrito ──→ Compra
 3. Ver ventas mensuales (gráfica de barras).
 4. Ver top productos y productos estancados.
 
-### 3. Puntos clave para la exposición
 
-- **Arquitectura**: Frontend HTML/JS vanilla ↔ FastAPI ↔ Oracle ADB con wallet mTLS.
-- **Transaccionalidad**: `FOR UPDATE` + transacción Oracle para consistencia en compras.
-- **ML**: Recomendación de precio vía `SentenceTransformer` + similitud coseno.
-- **Reportes**: Cálculo de revenue por vendedor desde `VENTA_DETALLE` (soporta multi-vendedor por compra).
-- **Gráficas**: Chart.js en frontend para historial de precios y ventas mensuales.
-- **EDA previo**: Notebook `EDA/analisis.ipynb` para limpieza de datos y detección de outliers.
 
-### 4. Comandos rápidos para demo
 
-```bash
-# 1. Iniciar todo
-python run.py
-
-# 2. Recargar datos demo (si es necesario)
-python Backend/scripts/seed_demo_data.py
-
-# 3. Ver logs del backend
-tail -f server_out.log
-tail -f server_err.log
-```
-
-### 5. Usuarios demo (si se ejecutó seed_demo_data.py)
-
-Consulta `claves_usuarios.txt` después de ejecutar el seed para ver credenciales predefinidas. Los usuarios demo incluyen clientes y vendedores con productos y compras de ejemplo.
