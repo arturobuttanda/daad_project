@@ -33,6 +33,7 @@ def asegurar_venv() -> Path:
     return ruta_python
 
 
+
 def ejecutar_comando(comando: list[str], cwd: Path | None = None, env: dict | None = None, silencioso: bool = False):
     if silencioso:
         subprocess.check_call(comando, cwd=cwd, env=env, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
