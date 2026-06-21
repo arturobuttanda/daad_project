@@ -274,11 +274,6 @@ NexusMarket/
 | GET | `/api/vendedor/reportes/top-productos` | Productos más vendidos |
 | GET | `/api/vendedor/reportes/ventas/csv` | Exportar ventas a CSV |
 
-### Salud
-
-| Método | Ruta | Descripción |
-|---|---|---|
-| GET | `/api/ping` | Health check (retorna estado del servidor y BD) |
 
 ---
 
@@ -388,7 +383,6 @@ erDiagram
 - Rango de fechas opcional via query params `fecha_inicio` y `fecha_fin`.
 
 ---
-
 ## Flujo de trabajo para exposición
 
 ### 1. Ciclo completo: Registro → Compra → Reporte
@@ -428,6 +422,7 @@ Registrar Cliente ───→ Marketplace ──→ Carrito ──→ Compra
 2. Ver indicadores: ingresos totales, costos, margen, stock bajo.
 3. Ver ventas mensuales (gráfica de barras).
 4. Ver top productos y productos estancados.
+
 
 
 
