@@ -25,7 +25,7 @@ prueba.json
 # Browser profiles (persistent Playwright sessions with cookies)
 .camelcamel_playwright_profile/
 
-
+documentacion.html
 
 # Logs
 *.log
