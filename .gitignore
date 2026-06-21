@@ -29,8 +29,8 @@ documentacion.html
 
 # Logs
 *.log
-server_err.log
-server_out.log
+server_err.log/
+server_out.log/
 
 # OS
 .DS_Store
