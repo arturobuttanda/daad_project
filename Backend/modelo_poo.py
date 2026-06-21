@@ -512,7 +512,7 @@ def crear_venta_por_item(
     "costo_unitario": float(precio_fabricacion) if precio_fabricacion is not None else None,
     "subtotal": subtotal,
     "margen_unitario": round(precio_unitario - float(precio_fabricacion), 2) if precio_fabricacion is not None else None,
-    "id_vendedor": vendedor.id_usuario if vendedor is not None else None,
+    "id_vendedor": vendedor.id if vendedor is not None else None,
   }
 
   return venta, detalle, producto.stock, subtotal, ganancia
