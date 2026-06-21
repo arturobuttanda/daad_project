@@ -164,11 +164,10 @@
           <p style="font-size:0.8125rem; color:var(--texto-suave);">
             Cliente: ${ticket.cliente?.nombre || "---"}
           </p>
-          ${ticket.vendedor?.nombre ? `<p style="font-size:0.8125rem; color:var(--texto-suave);">Vendedor: ${ticket.vendedor.nombre}</p>` : ""}
           <hr style="margin:0.75rem 0; border-color:var(--borde-suave);" />
           ${(ticket.items || []).map((item) => `
             <div class="ticket-item">
-              <span><span class="texto-truncado-xl" title="${item.nombre || ""}">${truncarTexto(item.nombre, 30)}</span> x${item.cantidad}</span>
+              <span><span class="texto-truncado-xl" title="${item.nombre || ""}">${truncarTexto(item.nombre, 30)}</span> x${item.cantidad}${item.vendedor_nombre ? `<br><small>Vendedor: ${truncarTexto(item.vendedor_nombre, 20)}</small>` : ""}</span>
               <span>${formatearDinero(item.subtotal)}</span>
             </div>
           `).join("")}

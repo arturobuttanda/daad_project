@@ -57,11 +57,6 @@
       <!-- PAGINACION -->
       <div class="paginacion" id="paginacion"></div>
 
-      <!-- COMPRAS RECIENTES -->
-      <div style="margin-top:2rem;">
-        <h2 style="font-size:1.125rem; font-weight:700; color:var(--texto); margin-bottom:1rem;">Compras recientes</h2>
-        <div id="comprasRecientes"></div>
-      </div>
     </main>
   </div>
 
@@ -136,7 +131,8 @@
       try {
         const catsApi = await Api.obtenerCategorias();
         if (Array.isArray(catsApi) && catsApi.length > 0) {
-          const setUnico = new Set([...catsApi, ...CATEGORIAS_DEFAULT]);
+          const normalizadas = [...catsApi, ...CATEGORIAS_DEFAULT].map(c => c.toLowerCase());
+          const setUnico = new Set(normalizadas);
           categorias = Array.from(setUnico).sort((a, b) => a.localeCompare(b, "es", { sensitivity: "base" }));
         }
       } catch (error) {
@@ -282,8 +278,6 @@
         cerrarCarrito();
         actualizarConteoCarrito();
         mostrarNotificacion("Compra realizada con exito.", "exito");
-        cargarComprasRecientes();
-
         // Mostrar ticket
         setTimeout(() => {
           if (resultado.id_venta) {
@@ -292,39 +286,6 @@
         }, 1000);
       } catch (error) {
         mostrarNotificacion("Error al pagar: " + error.message, "error");
-      }
-    }
-
-    // === COMPRAS RECIENTES ===
-    async function cargarComprasRecientes() {
-      try {
-        const datos = await Api.listarComprasCliente(usuario.id, "30d", 1, 4);
-        const compras = datos.items || [];
-        const div = document.getElementById("comprasRecientes");
-
-        if (compras.length === 0) {
-          div.innerHTML = '<p style="color:var(--texto-suave); font-size:0.875rem;">No hay compras recientes.</p>';
-          return;
-        }
-
-        div.innerHTML = compras.map((c) => `
-          <div class="tarjeta-simple" style="margin-bottom:0.75rem; padding:1rem;">
-            <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:0.5rem;">
-              <div>
-                <strong style="display:block; font-size:0.8125rem; color:#78716c; margin-bottom:0.125rem;">Folio: ${c.id_venta}</strong>
-                <small style="color:var(--texto-suave);">${formatearFecha(c.fecha_venta)}</small>
-                <p style="font-size:0.875rem; font-weight:600; margin-top:0.25rem;">${truncarTexto(c.resumen || "Compra", 40)}</p>
-              </div>
-              <div style="text-align:right;">
-                <strong style="color:var(--ambar);">${formatearDinero(c.monto_total)}</strong>
-                <small style="display:block; color:var(--texto-suave);">${c.total_unidades} unidades</small>
-              </div>
-            </div>
-          </div>
-        `).join("");
-      } catch {
-        document.getElementById("comprasRecientes").innerHTML =
-          '<p style="color:var(--texto-suave); font-size:0.875rem;">No se pudieron cargar compras recientes.</p>';
       }
     }
 

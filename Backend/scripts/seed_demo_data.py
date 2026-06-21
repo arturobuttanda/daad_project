@@ -154,16 +154,12 @@ def asegurar_tablas_cliente(cursor):
         CREATE TABLE ventas (
             id_venta        VARCHAR2(36) NOT NULL,
             id_cliente      VARCHAR2(36) NOT NULL,
-            id_vendedor     VARCHAR2(36),
             fecha_venta     TIMESTAMP DEFAULT CURRENT_TIMESTAMP NOT NULL,
             monto_total     NUMBER(12, 2) NOT NULL,
             total_unidades  NUMBER(10) NOT NULL,
             CONSTRAINT pk_ventas PRIMARY KEY (id_venta),
             CONSTRAINT fk_ventas_cliente FOREIGN KEY (id_cliente)
                 REFERENCES usuarios (id_usuario),
-            CONSTRAINT fk_ventas_vendedor FOREIGN KEY (id_vendedor)
-                REFERENCES vendedores (id_vendedor)
-                ON DELETE SET NULL,
             CONSTRAINT chk_ventas_monto CHECK (monto_total >= 0),
             CONSTRAINT chk_ventas_unidades CHECK (total_unidades >= 0)
         )
@@ -175,6 +171,7 @@ def asegurar_tablas_cliente(cursor):
         CREATE TABLE venta_detalle (
             id_venta         VARCHAR2(36) NOT NULL,
             id_producto      VARCHAR2(20) NOT NULL,
+            id_vendedor      VARCHAR2(36),
             cantidad         NUMBER(10) NOT NULL,
             precio_unitario  NUMBER(10, 2) NOT NULL,
             costo_unitario   NUMBER(10, 2),
@@ -186,6 +183,9 @@ def asegurar_tablas_cliente(cursor):
                 ON DELETE CASCADE,
             CONSTRAINT fk_detalle_producto FOREIGN KEY (id_producto)
                 REFERENCES productos (id_producto),
+            CONSTRAINT fk_detalle_vendedor FOREIGN KEY (id_vendedor)
+                REFERENCES vendedores (id_vendedor)
+                ON DELETE SET NULL,
             CONSTRAINT chk_detalle_cantidad CHECK (cantidad > 0),
             CONSTRAINT chk_detalle_precio CHECK (precio_unitario >= 0),
             CONSTRAINT chk_detalle_subtotal CHECK (subtotal >= 0)
@@ -350,21 +350,13 @@ def generar_ventas_demo(cursor, client_rows):
             items = random.sample(products, k=min(random.randint(1, 3), len(products)))
             total_amount = 0.0
             total_units = 0
-            cursor.execute(
-                "SELECT id_vendedor FROM producto_vendedor WHERE id_producto = :id_producto",
-                {"id_producto": items[0]["id_producto"]},
-            )
-            vendor_row = cursor.fetchone()
-            sale_vendor = vendor_row[0] if vendor_row else None
 
-            # insertar primero la cabecera de la venta para respetar la FK
             cursor.execute(
-                "INSERT INTO ventas (id_venta, id_cliente, id_vendedor, monto_total, total_unidades) "
-                "VALUES (:id_venta, :id_cliente, :id_vendedor, :monto_total, :total_unidades)",
+                "INSERT INTO ventas (id_venta, id_cliente, monto_total, total_unidades) "
+                "VALUES (:id_venta, :id_cliente, :monto_total, :total_unidades)",
                 {
                     "id_venta": sale_id,
                     "id_cliente": client_id,
-                    "id_vendedor": sale_vendor,
                     "monto_total": 0,
                     "total_unidades": 0,
                 },
@@ -375,8 +367,13 @@ def generar_ventas_demo(cursor, client_rows):
                 current_price = float(item.get("precio_actual") or 0)
                 stock = int(item.get("stock") or 0)
                 cost_price = item.get("precio_fabricacion")
-                product_name = item.get("nombre")
-                product_brand = item.get("marca")
+
+                cursor.execute(
+                    "SELECT id_vendedor FROM producto_vendedor WHERE id_producto = :id_producto",
+                    {"id_producto": product_id},
+                )
+                vendor_row = cursor.fetchone()
+                item_vendor = vendor_row[0] if vendor_row else None
 
                 quantity = random.randint(1, min(5, stock - 1))
                 subtotal = round(current_price * quantity, 2)
@@ -388,11 +385,12 @@ def generar_ventas_demo(cursor, client_rows):
                     {"cantidad": quantity, "id_producto": product_id},
                 )
                 cursor.execute(
-                    "INSERT INTO venta_detalle (id_venta, id_producto, cantidad, precio_unitario, costo_unitario, subtotal, margen_unitario) "
-                    "VALUES (:id_venta, :id_producto, :cantidad, :precio_unitario, :costo_unitario, :subtotal, :margen_unitario)",
+                    "INSERT INTO venta_detalle (id_venta, id_producto, id_vendedor, cantidad, precio_unitario, costo_unitario, subtotal, margen_unitario) "
+                    "VALUES (:id_venta, :id_producto, :id_vendedor, :cantidad, :precio_unitario, :costo_unitario, :subtotal, :margen_unitario)",
                     {
                         "id_venta": sale_id,
                         "id_producto": product_id,
+                        "id_vendedor": item_vendor,
                         "cantidad": quantity,
                         "precio_unitario": current_price,
                         "costo_unitario": float(cost_price) if cost_price is not None else None,

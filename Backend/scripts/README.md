@@ -1,1 +1,0 @@
-Estos son scrips que solo se ejecutaron una vez, pero sirvieron para modelar inicialmente el proyecto, ya sea creando la estructura de la base de datos, insertando los primeros datos iniciales a la base, distribuyendo los productos entre vendedores para poder hacer pruebas, etc

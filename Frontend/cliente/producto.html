@@ -79,28 +79,16 @@
         const mes = h.fecha.getMonth();
         const key = `${anio}-${mes}`;
         if (!grupos[key]) {
-          grupos[key] = {
-            precios: [],
-            nombreMes: h.fecha.toLocaleString('es-MX', { month: 'long' }),
-            anio: anio,
-            orden: anio * 12 + mes
-          };
+          grupos[key] = { precios: [], orden: anio * 12 + mes };
         }
         grupos[key].precios.push(h.precio);
       });
 
-      const promediosMensuales = Object.keys(grupos).map(key => {
+      return Object.keys(grupos).map(key => {
         const g = grupos[key];
         const avg = g.precios.reduce((a, b) => a + b, 0) / g.precios.length;
-        return {
-          mesLabel: `${g.nombreMes.charAt(0).toUpperCase() + g.nombreMes.slice(1)} ${g.anio}`,
-          promedio: avg,
-          orden: g.orden
-        };
-      });
-
-      promediosMensuales.sort((a, b) => b.orden - a.orden);
-      return promediosMensuales;
+        return { promedio: avg, orden: g.orden };
+      }).sort((a, b) => a.orden - b.orden);
     }
 
     function renderizarVista(datos) {
@@ -152,6 +140,15 @@
       }
 
       const promediosMensuales = calcularPromediosMensualesHistoricos(historialProcesadoGlobal);
+      const promediosMensualesConLabel = promediosMensuales.map(p => {
+        const anio = Math.floor(p.orden / 12);
+        const mes = p.orden % 12;
+        const fecha = new Date(anio, mes, 1);
+        return {
+          mesLabel: fecha.toLocaleString('es-MX', { month: 'long', year: 'numeric' }),
+          promedio: p.promedio,
+        };
+      }).reverse();
 
       document.getElementById("contenidoDetalle").innerHTML = `
         <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: 1.5rem; align-items: start;">
@@ -220,7 +217,7 @@
             <details style="margin-top: 0.5rem; font-size: 0.8125rem;">
               <summary style="font-weight: 600; color: var(--cafe-claro); cursor: pointer; padding: 0.25rem 0;">Ver tabla de promedios mensuales (${promediosMensuales.length})</summary>
               <div style="max-height: 250px; overflow-y: auto; border: 1px solid var(--borde-suave); border-radius: 0.5rem; margin-top: 0.5rem; padding: 0 0.5rem;">
-                ${promediosMensuales.length > 0 ? promediosMensuales.map(p => `
+                ${promediosMensualesConLabel.length > 0 ? promediosMensualesConLabel.map(p => `
                   <div style="display: flex; justify-content: space-between; padding: 0.45rem 0; border-bottom: 1px solid var(--borde-suave);">
                     <span style="color: var(--texto-suave);">${p.mesLabel}</span>
                     <strong style="color: var(--ambar);">${formatearDinero(p.promedio)}</strong>
@@ -240,47 +237,37 @@
       const btnMensual = document.getElementById("btnMensual");
       const btnTodo = document.getElementById("btnTodo");
 
-      let datosFiltrados = [];
-
       if (filtro === 'mensual') {
         btnMensual.className = "btn btn-sm btn-primario";
         btnTodo.className = "btn btn-sm btn-secundario";
         btnTodo.style.border = "none";
 
-        const ahora = new Date();
-        const hace30dias = new Date();
-        hace30dias.setDate(ahora.getDate() - 30);
-        datosFiltrados = historialProcesadoGlobal.filter(h => h.fecha >= hace30dias);
+        const promedios = calcularPromediosMensualesHistoricos(historialProcesadoGlobal);
+        const labels = promedios.map(p => {
+          const anio = Math.floor(p.orden / 12);
+          const mes = p.orden % 12;
+          return new Date(anio, mes, 1).toLocaleString('es-MX', { month: 'short', year: 'numeric' });
+        });
+        dibujarGrafica(labels, promedios.map(p => p.promedio));
       } else {
         btnMensual.className = "btn btn-sm btn-secundario";
         btnMensual.style.border = "none";
         btnTodo.className = "btn btn-sm btn-primario";
 
-        datosFiltrados = historialProcesadoGlobal;
+        const labels = historialProcesadoGlobal.map(d => formatearFecha(d.fecha));
+        dibujarGrafica(labels, historialProcesadoGlobal.map(d => d.precio));
       }
-
-      // Si no hay datos filtrados (ej. en mensual no hay registros del ultimo mes), usar todos los datos disponibles
-      if (datosFiltrados.length === 0) {
-        datosFiltrados = historialProcesadoGlobal;
-      }
-
-      dibujarGrafica(datosFiltrados);
     }
 
-    function dibujarGrafica(datos) {
+    function dibujarGrafica(labels, valores) {
       const canvas = document.getElementById('graficaPrecio');
       if (!canvas) return;
-
       const ctx = canvas.getContext('2d');
-      
-      const labels = datos.map(d => formatearFecha(d.fecha));
-      const precios = datos.map(d => d.precio);
 
       if (miGrafica) {
         miGrafica.destroy();
       }
 
-      // Crear gradiente de fondo (Rosa traslucido a transparente)
       const gradient = ctx.createLinearGradient(0, 0, 0, 240);
       gradient.addColorStop(0, 'rgba(219, 39, 119, 0.15)');
       gradient.addColorStop(1, 'rgba(219, 39, 119, 0.01)');
@@ -291,13 +278,13 @@
           labels: labels,
           datasets: [{
             label: 'Precio',
-            data: precios,
-            borderColor: '#db2777', // Rosa Keepa
+            data: valores,
+            borderColor: '#db2777',
             borderWidth: 2,
             backgroundColor: gradient,
             fill: true,
-            tension: 0.1, // Linea un poco suavizada
-            pointRadius: datos.length > 30 ? 1 : 4,
+            tension: 0.1,
+            pointRadius: valores.length > 30 ? 1 : 4,
             pointHoverRadius: 6,
             pointBackgroundColor: '#db2777',
             pointBorderColor: '#ffffff',
@@ -307,14 +294,9 @@
         options: {
           responsive: true,
           maintainAspectRatio: false,
-          interaction: {
-            mode: 'index',
-            intersect: false,
-          },
+          interaction: { mode: 'index', intersect: false },
           plugins: {
-            legend: {
-              display: false
-            },
+            legend: { display: false },
             tooltip: {
               backgroundColor: 'rgba(255, 255, 255, 0.95)',
               titleColor: '#451a03',
@@ -324,35 +306,22 @@
               padding: 10,
               displayColors: false,
               callbacks: {
-                title: function(items) {
-                  return 'Fecha: ' + items[0].label;
-                },
-                label: function(context) {
-                  return 'Precio: ' + formatearDinero(context.raw);
-                }
+                title: items => 'Fecha: ' + items[0].label,
+                label: ctx => 'Precio: ' + formatearDinero(ctx.raw),
               }
             }
           },
           scales: {
             x: {
-              grid: {
-                color: '#f3f4f6'
-              },
-              ticks: {
-                font: { size: 9, family: 'Segoe UI' },
-                color: '#78716c'
-              }
+              grid: { color: '#f3f4f6' },
+              ticks: { font: { size: 9, family: 'Segoe UI' }, color: '#78716c' }
             },
             y: {
-              grid: {
-                color: '#e5e7eb'
-              },
+              grid: { color: '#e5e7eb' },
               ticks: {
                 font: { size: 9, family: 'Segoe UI' },
                 color: '#78716c',
-                callback: function(value) {
-                  return '$' + value.toLocaleString();
-                }
+                callback: v => '$' + v.toLocaleString(),
               }
             }
           }

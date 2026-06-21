@@ -421,9 +421,12 @@
 │   ├── <span class="fn">app.py</span>                     <span class="cm"># Punto de entrada FastAPI: define endpoints</span>
 │   ├── <span class="fn">conexion_base.py</span>           <span class="cm"># Todas las consultas SQL a Oracle</span>
 │   ├── <span class="fn">modelo_poo.py</span>              <span class="cm"># Clases: Persona, Producto, Venta, Informe</span>
-│   └── <span class="cl">recomendacion_precio/</span>
-│       ├── <span class="fn">recomendador_precio.py</span> <span class="cm"># Clase RecomendadorPrecio (TF-IDF)</span>
-│       └── <span class="fn">__init__.py</span>            <span class="cm"># Exporta obtener_recomendador()</span>
+│   ├── <span class="cl">recomendacion_precio/</span>
+│   │   ├── <span class="fn">recomendador_precio.py</span> <span class="cm"># Clase RecomendadorPrecio (TF-IDF)</span>
+│   │   └── <span class="fn">__init__.py</span>            <span class="cm"># Exporta obtener_recomendador()</span>
+│   └── <span class="cl">scripts/</span>
+│       ├── <span class="fn">schema.sql</span>                <span class="cm"># DDL de la BD</span>
+│       └── <span class="fn">seed_demo_data.py</span>        <span class="cm"># Poblado de datos demo</span>
 │
 └── <span class="cl">Frontend/</span>
     ├── <span class="fn">index.html</span>                 <span class="cm"># Página de inicio</span>
@@ -490,9 +493,7 @@
       <table class="tbl">
         <thead><tr><th>Ruta</th><th>Método</th><th>¿Qué hace?</th></tr></thead>
         <tbody>
-          <tr><td><code>/api/productos</code></td><td><span class="badge badge-green">GET</span></td><td>Lista todos los productos con paginación.</td></tr>
           <tr><td><code>/api/productos</code></td><td><span class="badge badge-blue">POST</span></td><td>Crea un producto e incluye sugerencia de precio TF-IDF en la respuesta.</td></tr>
-          <tr><td><code>/api/productos/{id}</code></td><td><span class="badge badge-green">GET</span></td><td>Detalle de un producto por su ID.</td></tr>
           <tr><td><code>/api/productos/{id}</code></td><td><span class="badge badge-amber">PUT</span></td><td>Actualiza cualquier campo del producto (solo los enviados).</td></tr>
           <tr><td><code>/api/productos/{id}</code></td><td><span class="badge badge-red">DELETE</span></td><td>Elimina el producto y su relación con el vendedor.</td></tr>
           <tr><td><code>/api/productos/categorias</code></td><td><span class="badge badge-green">GET</span></td><td>Lista todas las categorías distintas existentes.</td></tr>
@@ -506,8 +507,7 @@
       <table class="tbl">
         <thead><tr><th>Ruta</th><th>Método</th><th>¿Qué hace?</th></tr></thead>
         <tbody>
-          <tr><td><code>/api/productos/recomendacion-precio</code></td><td><span class="badge badge-blue">POST</span></td><td>Dado nombre+marca+categoría, devuelve precio recomendado TF-IDF con métricas de similitud. Usado por el formulario del inventario.</td></tr>
-          <tr><td><code>/api/recomendar-precio</code></td><td><span class="badge badge-blue">POST</span></td><td>Endpoint público con la respuesta completa del recomendador (precio_recomendado, similitud_promedio, similitud_maxima, productos_utilizados).</td></tr>
+          <tr><td><code>/api/productos/recomendacion-precio</code></td><td><span class="badge badge-blue">POST</span></td><td>Dado nombre+marca+categoría, devuelve precio recomendado TF-IDF con métricas de similitud (precio_recomendado, similitud_promedio, similitud_maxima, productos_utilizados).</td></tr>
         </tbody>
       </table>
     </div>
@@ -531,11 +531,11 @@
       <table class="tbl">
         <thead><tr><th>Ruta</th><th>Método</th><th>¿Qué hace?</th></tr></thead>
         <tbody>
-          <tr><td><code>/api/vendedor/reportes/indicadores</code></td><td><span class="badge badge-green">GET</span></td><td>KPIs: ingresos, costos, margen, total ventas, ticket promedio.</td></tr>
+          <tr><td><code>/api/vendedor/reportes/indicadores</code></td><td><span class="badge badge-green">GET</span></td><td>KPIs: ingresos, costos, margen, total ventas, stock bajo.</td></tr>
           <tr><td><code>/api/vendedor/reportes/ventas-mensuales</code></td><td><span class="badge badge-green">GET</span></td><td>Ventas agrupadas por mes (para gráfica de barras).</td></tr>
-          <tr><td><code>/api/vendedor/reportes/top-productos</code></td><td><span class="badge badge-green">GET</span></td><td>Ranking de productos más vendidos.</td></tr>
-          <tr><td><code>/api/vendedor/reportes/ventas/csv</code></td><td><span class="badge badge-green">GET</span></td><td>Descarga un archivo CSV con todo el historial de ventas</td></t.r>
-          <tr><td><code>/api/vendedor/compras</code></td><td><span class="badge badge-green">GET</span></td><td>Lista de todas las ventas realizadas a través del vendedor.</td></tr>
+          <tr><td><code>/api/vendedor/reportes/top-productos</code></td><td><span class="badge badge-green">GET</span></td><td>Ranking de productos más vendidos por ingresos.</td></tr>
+          <tr><td><code>/api/vendedor/reportes/productos-estancados</code></td><td><span class="badge badge-green">GET</span></td><td>Ranking de productos con menor rotación (menos vendidos).</td></tr>
+          <tr><td><code>/api/vendedor/reportes/ventas/csv</code></td><td><span class="badge badge-green">GET</span></td><td>Descarga CSV de ventas filtrado por vendedor.</td></tr>
         </tbody>
       </table>
     </div>
@@ -580,21 +580,47 @@
       </div>
       <div class="card-sm">
         <h4>ventas</h4>
-        <p><code>id_venta</code>, <code>id_cliente</code>, <code>id_vendedor</code>, <code>fecha_venta</code>, <code>monto_total</code>, <code>total_unidades</code></p>
+        <p><code>id_venta</code>, <code>id_cliente</code>, <code>fecha_venta</code>, <code>monto_total</code>, <code>total_unidades</code></p>
       </div>
       <div class="card-sm">
         <h4>venta_detalle</h4>
-        <p><code>id_venta</code>, <code>id_producto</code>, <code>cantidad</code>, <code>precio_unitario</code>, <code>subtotal</code></p>
+        <p><code>id_venta</code>, <code>id_producto</code>, <code>id_vendedor</code> (FK → vendedores), <code>cantidad</code>, <code>precio_unitario</code>, <code>subtotal</code>, <code>costo_unitario</code>, <code>margen_unitario</code></p>
       </div>
       <div class="card-sm">
         <h4>historial_precios</h4>
-        <p><code>id_producto</code>, <code>fecha</code>, <code>precio_registrado</code>. Guarda la evolución del precio de cada producto.</p>
+        <p><code>id_producto</code>, <code>fecha</code>, <code>precio_registrado</code>. Guarda la evolución del precio de cada producto (sin outliers, preprocesado vía EDA).</p>
+      </div>
+      <div class="card-sm">
+        <h4>historial_precios_raw</h4>
+        <p>Copia de seguridad del historial original con outliers. Se preserva como respaldo.</p>
       </div>
       <div class="card-sm">
         <h4>competencia_mercado</h4>
         <p><code>id_producto</code>, <code>precio_competencia_promedio</code>. Precio promedio de competidores externos.</p>
       </div>
     </div>
+
+    <h3>Migración realizada: <code>id_vendedor</code> a <code>venta_detalle</code></h3>
+    <p>Originalmente <code>id_vendedor</code> estaba en la tabla <code>ventas</code>, lo que impedía que una misma compra tuviera productos de distintos vendedores. Se migró así:</p>
+    <div class="card-grid">
+      <div class="card-sm" style="border-color:#ef444455;">
+        <h4>Antes</h4>
+        <p><code>ventas.id_vendedor</code> → FK a vendedores<br/>
+        <code>venta_detalle</code> sin vendedor</p>
+      </div>
+      <div class="card-sm" style="border-color:#10b98155;">
+        <h4>Después</h4>
+        <p><code>venta_detalle.id_vendedor</code> → FK a vendedores (ON DELETE SET NULL)<br/>
+        <code>ventas</code> sin <code>id_vendedor</code></p>
+      </div>
+    </div>
+    <p>Los datos se migraron con: <code>UPDATE venta_detalle d SET id_vendedor = (SELECT v.id_vendedor FROM ventas v WHERE v.id_venta = d.id_venta)</code>. Luego se eliminó la columna y FK de <code>ventas</code>.</p>
+
+    <h3>Limpieza de outliers en historial de precios (EDA)</h3>
+    <p>El archivo <code>EDA/HistorialPrecios_EDA.csv</code> se generó aplicando IQR (Rango Intercuartil) para eliminar 883 registros atípicos. La tabla original se renombró a <code>historial_precios_raw</code> y la nueva <code>historial_precios</code> se cargó con los datos limpios (195,019 registros).</p>
+
+    <h3>Eliminación de código muerto</h3>
+    <p>Se eliminaron 20 archivos obsoletos (scripts one-time, logs, datos JSON, README.md) y funciones/endpoints no utilizados en backend y frontend. Comentarios redundantes se acortaron.</p>
 
     <h3>La clase BaseOracle — <code>conexion_base.py</code></h3>
     <p>Toda la interacción con Oracle está encapsulada en una única clase <code>BaseOracle</code>. Esta clase tiene un método por cada tipo de operación que necesita el sistema:</p>
@@ -940,15 +966,15 @@ precio = <span class="fn">Σ</span>(precio_i × similitud_i) / <span class="fn">
       <p><strong>Modal de nuevo producto:</strong> Un formulario que escucha los campos nombre/marca/categoría. Con un debounce de 600ms, llama automáticamente a <code>Api.recomendarPrecio()</code> y muestra el precio sugerido TF-IDF con métricas de similitud y tabla de productos similares.</p>
     </div>
 
-    <div class="card">
+      <div class="card">
       <h4>reporte.html — Finanzas</h4>
-      <p>Muestra KPIs financieros (ingresos, costos, margen), gráfica de ventas mensuales, top productos más vendidos y botón para exportar CSV.</p>
+      <p>Muestra KPIs financieros (ingresos, costos, margen, stock bajo), gráfica de ventas mensuales, top productos más vendidos, todos los productos ordenados por menor rotación (sin límite) y botón para exportar CSV filtrado por vendedor.</p>
     </div>
 
     <h3>Las páginas del cliente</h3>
     <div class="card">
       <h4>marketplace.html</h4>
-      <p>Catálogo con buscador por texto y filtro por categoría. Paginación. Cada tarjeta de producto lleva a <code>producto.html?id=PROD-001</code>.</p>
+      <p>Catálogo con buscador por texto y filtro por categoría. Paginación. Cada tarjeta de producto lleva a <code>producto.html?id=PROD-001</code>. Usa carrito lateral persistente en localStorage.</p>
     </div>
     <div class="card">
       <h4>producto.html — Detalle con gráfica tipo Keepa</h4>
@@ -1032,7 +1058,7 @@ precio = <span class="fn">Σ</span>(precio_i × similitud_i) / <span class="fn">
         </div>
         <div style="display:flex; align-items:center; gap:0.75rem;">
           <span class="badge badge-green">7</span>
-          <span>Se muestra el ticket de compra en pantalla con el número de transacción</span>
+          <span>Se redirige a historial.html donde se muestra el ticket con detalle de cada producto y su vendedor</span>
         </div>
       </div>
     </div>

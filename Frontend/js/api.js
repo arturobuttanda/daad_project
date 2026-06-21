@@ -90,12 +90,11 @@ const Api = {
     return eventoFetch(url);
   },
 
-  realizarCompra(idCliente, items, idVendedor = null) {
+  realizarCompra(idCliente, items) {
     return eventoFetch(`${BACKEND_URL}/api/cliente/compras`, {
       method: "POST",
       body: JSON.stringify({
         id_cliente: idCliente,
-        id_vendedor: idVendedor,
         items: items.map((item) => ({
           id_producto: item.id_producto,
           cantidad: item.cantidad,
@@ -133,9 +132,9 @@ const Api = {
     return eventoFetch(url);
   },
 
-  obtenerProductosEstancados(idVendedor = null, limite = 10) {
-    let url = `${BACKEND_URL}/api/vendedor/reportes/productos-estancados?limite=${limite}`;
-    if (idVendedor) url += `&id_vendedor=${encodeURIComponent(idVendedor)}`;
+  obtenerProductosEstancados(idVendedor = null) {
+    let url = `${BACKEND_URL}/api/vendedor/reportes/productos-estancados`;
+    if (idVendedor) url += `?id_vendedor=${encodeURIComponent(idVendedor)}`;
     return eventoFetch(url);
   },
 

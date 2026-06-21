@@ -1,24 +1,13 @@
 from __future__ import annotations
 
-"""Backend principal del proyecto en espanol.
-
-Define la aplicacion FastAPI que expone la API REST para:
-- registro, inicio de sesion y actualizacion de perfiles de usuario
-- gestion de productos (listar, crear, actualizar, eliminar)
-- compra de productos por clientes
-- administracion y consulta de ventas
-- exportacion de reportes en CSV e indicadores financieros
-
-Este archivo es el punto de entrada del backend web y utiliza el servicio
-Backend.conexion_base.db para acceder a la base de datos Oracle.
-"""
+"""API REST FastAPI: usuarios, productos, compras, reportes."""
 import os
 import sys
 import re
 import math
 import uuid
 from functools import lru_cache
-from datetime import date, datetime, timedelta
+from datetime import datetime, timedelta
 from pathlib import Path
 import logging
 
@@ -30,7 +19,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse
 from passlib.context import CryptContext
 from pydantic import BaseModel
-import numpy as np
+
 import io
 import csv
 from Backend.conexion_base import (
@@ -130,7 +119,6 @@ class SolicitudItemCompra(BaseModel):
 
 class SolicitudCompra(BaseModel):
   id_cliente: str
-  id_vendedor: str | None = None
   items: list[SolicitudItemCompra]
 
 
@@ -192,13 +180,6 @@ def normalizar_texto_opcional(valor: str | None) -> str | None:
   return limpio or None
 
 
-def normalizar_texto_mostrar(valor: object | None, fallback: str = "") -> str:
-  if valor is None:
-    return fallback
-  limpio = " ".join(str(valor).split())
-  return limpio or fallback
-
-
 def _validar_no_negativo(nombre: str, valor: float | int | None) -> None:
   if valor is None:
     return
@@ -226,6 +207,14 @@ def _paginar_respuesta(
   }
 
 
+# === ENDPOINTS: SALUD ===
+
+@app.get("/api/ping")
+def ping():
+  """Endpoint ligero de conectividad. No requiere autenticacion."""
+  return {"status": "ok", "base_datos": db.verificar_conexion()}
+
+
 # === ENDPOINTS: REPORTES ===
 
 @app.get("/api/vendedor/reportes/ventas/csv")
@@ -234,14 +223,13 @@ def exportar_ventas_csv(period: str = Query("all"), id_vendedor: str | None = Qu
 
   consulta = (
     "SELECT v.id_venta, v.fecha_venta, v.id_cliente, cu.nombre AS cliente_nombre, "
-    "pv.id_vendedor, uv.nombre AS vendedor_nombre, "
+    "d.id_vendedor, uv.nombre AS vendedor_nombre, "
     "d.id_producto, p.nombre AS producto_nombre, d.cantidad, d.precio_unitario, "
     "d.subtotal, v.monto_total, v.total_unidades "
     "FROM ventas v "
     "JOIN venta_detalle d ON d.id_venta = v.id_venta "
-    "JOIN producto_vendedor pv ON pv.id_producto = d.id_producto "
     "LEFT JOIN usuarios cu ON cu.id_usuario = v.id_cliente "
-    "LEFT JOIN vendedores vv ON vv.id_vendedor = pv.id_vendedor "
+    "LEFT JOIN vendedores vv ON vv.id_vendedor = d.id_vendedor "
     "LEFT JOIN usuarios uv ON uv.id_usuario = vv.id_vendedor "
     "LEFT JOIN productos p ON p.id_producto = d.id_producto "
   )
@@ -252,7 +240,7 @@ def exportar_ventas_csv(period: str = Query("all"), id_vendedor: str | None = Qu
     condiciones.append("v.fecha_venta >= :fecha_inicio")
     parametros["fecha_inicio"] = fecha_inicio
   if id_vendedor:
-    condiciones.append("pv.id_vendedor = :id_vendedor")
+    condiciones.append("d.id_vendedor = :id_vendedor")
     parametros["id_vendedor"] = id_vendedor.strip()
 
   if condiciones:
@@ -318,15 +306,6 @@ def obtener_columnas_producto() -> tuple[str, ...]:
   
   # Retornar columnas por defecto si hay error de conexión
   return tuple(COLUMNAS_BASE_PRODUCTO + COLUMNAS_OPCIONALES_PRODUCTO)
-
-
-def construir_columnas_seleccion_producto() -> list[str]:
-  disponibles = set(obtener_columnas_producto())
-  columnas = [col for col in COLUMNAS_BASE_PRODUCTO if col in disponibles]
-  for col in COLUMNAS_OPCIONALES_PRODUCTO:
-    if col in disponibles:
-      columnas.append(col)
-  return columnas
 
 
 def consultar_producto_por_id(id_producto: str) -> dict[str, object | None] | None:
@@ -396,34 +375,9 @@ def calcular_recomendacion_precio_app(
 
 # === ENDPOINTS PUBLICOS ===
 
-@app.get("/api/health")
-def estado_salud():
-  return {"status": "ok"}
-
-
-@app.post("/api/recomendar-precio")
-def api_recomendar_precio(solicitud: SolicitudRecomendarPrecio):
-  """Endpoint publico de recomendacion de precio (TF-IDF + Coseno)."""
-  try:
-    recomendador = obtener_recomendador()
-    resultado = recomendador.recomendar(
-      nombre=solicitud.nombre,
-      marca=solicitud.marca,
-      categoria=solicitud.categoria,
-    )
-    return resultado
-  except Exception as exc:
-    bitacora.exception("Error en recomendacion de precio: %s", exc)
-    raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(exc))
-
-
 @app.post("/api/productos/recomendacion-precio")
 def recomendar_precio_producto(solicitud: SolicitudRecomendarPrecio):
-  """Endpoint de recomendacion de precio para el inventario del vendedor.
-
-  Mantiene compatibilidad con el frontend existente retornando precio_sugerido
-  ademas del precio_recomendado del nuevo servicio TF-IDF.
-  """
+  """Recomienda precio via TF-IDF; retorna precio_sugerido + precio_recomendado."""
   try:
     recomendador = obtener_recomendador()
     resultado = recomendador.recomendar(
@@ -437,7 +391,7 @@ def recomendar_precio_producto(solicitud: SolicitudRecomendarPrecio):
 
   productos_utilizados = resultado.get("productos_utilizados", [])
 
-  # Compatibilidad con el frontend que usa precio_sugerido y similares
+  # Frontend espera precio_sugerido
   return {
     "precio_recomendado": resultado.get("precio_recomendado"),
     "precio_sugerido": resultado.get("precio_recomendado"),
@@ -656,22 +610,6 @@ def actualizar_perfil_usuario_endpoint(solicitud: SolicitudActualizarPerfil):
 
 # === ENDPOINTS: PRODUCTOS ===
 
-@app.get("/api/productos")
-def listar_productos(page: int = Query(1, ge=1), page_size: int = Query(20, ge=1, le=100)):
-  try:
-    productos, total_items = db.listar_productos(page, page_size)
-  except Exception as exc:
-    bitacora.exception("Error al listar productos: %s", exc)
-    raise HTTPException(
-      status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-      detail="No se pudieron obtener los productos.",
-    )
-  return _paginar_respuesta(
-    [producto.a_diccionario() for producto in productos],
-    total_items, page, page_size,
-  )
-
-
 @app.get("/api/vendedor/productos")
 def listar_productos_vendedor(
   vendedor_id: str = Query(..., min_length=1),
@@ -710,17 +648,6 @@ def obtener_todas_categorias():
       status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
       detail="No se pudieron obtener las categorias.",
     )
-
-
-@app.get("/api/productos/{product_id}")
-def obtener_producto(product_id: str):
-  producto = consultar_producto_por_id(normalizar_id_producto(product_id))
-  if not producto:
-    raise HTTPException(
-      status_code=status.HTTP_404_NOT_FOUND,
-      detail="El producto no existe.",
-    )
-  return producto
 
 
 @app.post("/api/productos")
@@ -974,7 +901,6 @@ def crear_compra(solicitud: SolicitudCompra):
   try:
     resultado = db.crear_compra(
       solicitud.id_cliente,
-      solicitud.id_vendedor,
       [item.model_dump() for item in solicitud.items],
     )
   except BaseDatosNoEncontrada as exc:
@@ -1009,39 +935,6 @@ def listar_compras_cliente(
     raise HTTPException(
       status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
       detail="No se pudo obtener el historial de compras.",
-    )
-
-  return {
-    "items": items,
-    "page": pagina_actual,
-    "page_size": page_size,
-    "total_items": total_items,
-    "total_pages": total_paginas,
-  }
-
-
-@app.get("/api/vendedor/compras")
-def listar_compras_vendedor(
-  id_vendedor: str = Query(...),
-  period: str = Query("all"),
-  page: int = Query(1, ge=1),
-  page_size: int = Query(10, ge=1, le=50),
-):
-  id_vendedor = id_vendedor.strip()
-  if not id_vendedor:
-    raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="El vendedor es obligatorio.")
-
-  fecha_inicio = resolver_inicio_periodo(period)
-
-  try:
-    items, total_items = db.listar_compras_vendedor(id_vendedor, fecha_inicio, page, page_size)
-    total_paginas = max(1, (total_items + page_size - 1) // page_size) if total_items else 1
-    pagina_actual = min(page, total_paginas)
-  except Exception as exc:
-    bitacora.exception("Error al listar compras del vendedor: %s", exc)
-    raise HTTPException(
-      status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-      detail="No se pudo obtener el historial de ventas del vendedor.",
     )
 
   return {
@@ -1120,9 +1013,9 @@ def obtener_ventas_mensuales_api(id_vendedor: str | None = None, meses: int = 6)
 
 
 @app.get("/api/vendedor/reportes/productos-estancados")
-def obtener_productos_estancados_api(id_vendedor: str | None = None, limite: int = 10):
+def obtener_productos_estancados_api(id_vendedor: str | None = None):
   try:
-    datos = db.obtener_productos_estancados(id_vendedor, limite)
+    datos = db.obtener_productos_estancados(id_vendedor)
   except Exception as exc:
     bitacora.exception("Error al obtener productos estancados: %s", exc)
     raise HTTPException(

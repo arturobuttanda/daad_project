@@ -474,40 +474,6 @@ select.campo { appearance: none; background-image: url("data:image/svg+xml,%3Csv
   color: var(--texto);
 }
 
-/* === DONA === */
-.dona-contenedor {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 2rem;
-  flex-wrap: wrap;
-}
-
-.dona {
-  width: 160px;
-  height: 160px;
-  border-radius: 50%;
-  position: relative;
-}
-
-.dona-leyenda {
-  display: flex;
-  flex-direction: column;
-  gap: 0.5rem;
-}
-.dona-leyenda-item {
-  display: flex;
-  align-items: center;
-  gap: 0.5rem;
-  font-size: 0.8125rem;
-}
-.dona-leyenda-item .color {
-  width: 12px;
-  height: 12px;
-  border-radius: 3px;
-  flex-shrink: 0;
-}
-
 /* === NOTIFICACIONES === */
 .notificacion {
   position: fixed;

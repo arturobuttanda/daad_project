@@ -1,18 +1,12 @@
 from __future__ import annotations
 
-"""Capa de persistencia para Oracle.
-
-Expone la clase BaseOracle con operaciones de lectura y escritura en la
-base de datos. La logica de negocio de cliente/vendedor debe residir en la
-logica de dominio POO (Backend.modelo_poo), mientras que aqui solo se deben
-manejar consultas, inserciones, actualizaciones y eliminaciones de datos.
-"""
+"""Capa de persistencia Oracle: consultas CRUD, sin logica de negocio."""
 
 import os
 import re
 from datetime import datetime
 from pathlib import Path
-from typing import Iterable
+
 
 import oracledb
 try:
@@ -122,13 +116,26 @@ class BaseOracle:
                 min=1,
                 max=10,
                 increment=1,
-                timeout=5,
+                timeout=30,
+                wait_timeout=5000,
+                max_lifetime_session=600,
             )
         return self._pool
 
     def conectar(self):
         """Obtiene conexion del pool. Al cerrar, se reusa automaticamente."""
         return self._obtener_pool().acquire()
+
+    def verificar_conexion(self) -> bool:
+        """Ping rapido a la BD. Retorna True si responde."""
+        try:
+            with self.conectar() as conexion:
+                with conexion.cursor() as cursor:
+                    cursor.execute("SELECT 1 FROM DUAL")
+                    cursor.fetchone()
+            return True
+        except Exception:
+            return False
 
     def obtener_columnas_producto(self) -> tuple[str, ...]:
         """Obtiene las columnas disponibles de la tabla productos."""
@@ -450,12 +457,7 @@ class BaseOracle:
                     )
             conexion.commit()
 
-    def crear_compra(self, id_cliente: str, id_vendedor: str | None, items: list[dict[str, object]]) -> dict[str, object]:
-        """Procesa una compra: crea cabecera, detalle, actualiza stock.
-
-        Ejecuta toda la operacion dentro de una transaccion atomica.
-        """
-        id_vendedor_compra = id_vendedor.strip() if id_vendedor else None
+    def crear_compra(self, id_cliente: str, items: list[dict[str, object]]) -> dict[str, object]:
         if not id_cliente:
             raise ValidacionBaseDatosError("El cliente es obligatorio.")
         if not items:
@@ -466,7 +468,6 @@ class BaseOracle:
         unidades_totales = 0
         items_ticket: list[dict[str, object]] = []
         cliente: Cliente | None = None
-        vendedor: Vendedor | None = None
 
         with self.conectar() as conexion:
             with conexion.cursor() as cursor:
@@ -480,25 +481,12 @@ class BaseOracle:
                     raise BaseDatosNoEncontrada("El cliente no existe.")
                 cliente = crear_usuario_desde_fila_usuario(fila_cliente)
 
-                if id_vendedor_compra:
-                    cursor.execute(
-                        "SELECT u.id_usuario, u.nombre, u.telefono, u.correo, u.tipo_usuario "
-                        "FROM usuarios u JOIN vendedores v ON v.id_vendedor = u.id_usuario "
-                        "WHERE u.id_usuario = :id_usuario",
-                        {"id_usuario": id_vendedor_compra},
-                    )
-                    fila_vendedor = cursor.fetchone()
-                    if not fila_vendedor:
-                        raise BaseDatosNoEncontrada("El vendedor no existe.")
-                    vendedor = crear_usuario_desde_fila_usuario(fila_vendedor)
-
                 cursor.execute(
-                    "INSERT INTO ventas (id_venta, id_cliente, id_vendedor, monto_total, total_unidades) "
-                    "VALUES (:id_venta, :id_cliente, :id_vendedor, :monto_total, :total_unidades)",
+                    "INSERT INTO ventas (id_venta, id_cliente, monto_total, total_unidades) "
+                    "VALUES (:id_venta, :id_cliente, :monto_total, :total_unidades)",
                     {
                         "id_venta": id_venta,
                         "id_cliente": id_cliente,
-                        "id_vendedor": id_vendedor_compra,
                         "monto_total": 0,
                         "total_unidades": 0,
                     },
@@ -526,21 +514,21 @@ class BaseOracle:
                     precio_valor = float(precio_actual or 0)
                     costo_valor = float(costo_producto) if costo_producto is not None else None
 
-                    if vendedor is None and id_vendedor_compra is None and id_vendedor_producto:
-                        id_vendedor_compra = id_vendedor_producto
+                    vendedor_item: Vendedor | None = None
+                    if id_vendedor_producto:
                         cursor.execute(
                             "SELECT u.id_usuario, u.nombre, u.telefono, u.correo, u.tipo_usuario "
                             "FROM usuarios u JOIN vendedores v ON v.id_vendedor = u.id_usuario "
                             "WHERE u.id_usuario = :id_usuario",
-                            {"id_usuario": id_vendedor_compra},
+                            {"id_usuario": id_vendedor_producto},
                         )
                         fila_vendedor = cursor.fetchone()
                         if fila_vendedor:
-                            vendedor = crear_usuario_desde_fila_usuario(fila_vendedor)
+                            vendedor_item = crear_usuario_desde_fila_usuario(fila_vendedor)
 
                     venta_obj, detalle, stock_restante, subtotal, ganancia = crear_venta_por_item(
                         cliente,
-                        vendedor,
+                        vendedor_item,
                         id_venta,
                         id_producto,
                         nombre_producto,
@@ -563,8 +551,8 @@ class BaseOracle:
                     items_ticket.append(detalle)
 
                     cursor.execute(
-                        "INSERT INTO venta_detalle (id_venta, id_producto, cantidad, precio_unitario, costo_unitario, subtotal, margen_unitario) "
-                        "VALUES (:id_venta, :id_producto, :cantidad, :precio_unitario, :costo_unitario, :subtotal, :margen_unitario)",
+                        "INSERT INTO venta_detalle (id_venta, id_producto, cantidad, precio_unitario, costo_unitario, subtotal, margen_unitario, id_vendedor) "
+                        "VALUES (:id_venta, :id_producto, :cantidad, :precio_unitario, :costo_unitario, :subtotal, :margen_unitario, :id_vendedor)",
                         {
                             "id_venta": id_venta,
                             "id_producto": id_producto,
@@ -573,6 +561,7 @@ class BaseOracle:
                             "costo_unitario": costo_valor,
                             "subtotal": subtotal,
                             "margen_unitario": round(ganancia / cantidad, 2) if ganancia is not None else None,
+                            "id_vendedor": id_vendedor_producto,
                         },
                     )
 
@@ -585,7 +574,6 @@ class BaseOracle:
         return {
             "id_venta": id_venta,
             "id_cliente": id_cliente,
-            "id_vendedor": id_vendedor_compra,
             "fecha_venta": datetime.utcnow().isoformat(),
             "monto_total": round(monto_total, 2),
             "total_unidades": unidades_totales,
@@ -662,17 +650,17 @@ class BaseOracle:
 
     def listar_compras_vendedor(self, id_vendedor: str, fecha_inicio: datetime | None, pagina: int, tamano_pagina: int) -> tuple[list[dict[str, object | None]], int]:
         """Obtiene las ventas realizadas por un vendedor con paginacion."""
-        filtros = ["v.id_vendedor = :id_vendedor"]
+        filtros = ["d.id_vendedor = :id_vendedor"]
         parametros: dict[str, object] = {"id_vendedor": id_vendedor}
         if fecha_inicio:
             filtros.append("v.fecha_venta >= :fecha_inicio")
             parametros["fecha_inicio"] = fecha_inicio
 
         clausula_where = " WHERE " + " AND ".join(filtros)
-        consulta_conteo = f"SELECT COUNT(DISTINCT v.id_venta) FROM ventas v{clausula_where}"
+        consulta_conteo = f"SELECT COUNT(DISTINCT d.id_venta) FROM venta_detalle d{clausula_where}"
         consulta_lista = (
-            "SELECT v.id_venta, v.fecha_venta, v.monto_total, v.total_unidades, u.id_usuario, u.nombre "
-            f"FROM ventas v JOIN usuarios u ON u.id_usuario = v.id_cliente{clausula_where} "
+            "SELECT DISTINCT v.id_venta, v.fecha_venta, v.monto_total, v.total_unidades, u.id_usuario, u.nombre "
+            f"FROM venta_detalle d JOIN ventas v ON v.id_venta = d.id_venta JOIN usuarios u ON u.id_usuario = v.id_cliente{clausula_where} "
             "ORDER BY v.fecha_venta DESC, v.id_venta DESC OFFSET :offset ROWS FETCH NEXT :tamano ROWS ONLY"
         )
 
@@ -738,11 +726,9 @@ class BaseOracle:
             with conexion.cursor() as cursor:
                 cursor.execute(
                     "SELECT v.id_venta, v.fecha_venta, v.monto_total, v.total_unidades, "
-                    "u.id_usuario, u.nombre, v.id_vendedor, uv.nombre AS vendedor_nombre "
+                    "u.id_usuario, u.nombre "
                     "FROM ventas v "
                     "JOIN usuarios u ON u.id_usuario = v.id_cliente "
-                    "LEFT JOIN vendedores vv ON vv.id_vendedor = v.id_vendedor "
-                    "LEFT JOIN usuarios uv ON uv.id_usuario = vv.id_vendedor "
                     "WHERE v.id_venta = :id_venta",
                     {"id_venta": id_venta},
                 )
@@ -750,9 +736,12 @@ class BaseOracle:
                 if not cabecera:
                     raise BaseDatosNoEncontrada("La venta no existe.")
                 cursor.execute(
-                    "SELECT d.id_producto, p.nombre, p.marca, d.cantidad, d.precio_unitario, d.subtotal, d.costo_unitario, d.margen_unitario "
+                    "SELECT d.id_producto, p.nombre, p.marca, d.cantidad, d.precio_unitario, d.subtotal, "
+                    "d.costo_unitario, d.margen_unitario, d.id_vendedor, uv.nombre AS vendedor_nombre "
                     "FROM venta_detalle d "
                     "JOIN productos p ON p.id_producto = d.id_producto "
+                    "LEFT JOIN vendedores vv ON vv.id_vendedor = d.id_vendedor "
+                    "LEFT JOIN usuarios uv ON uv.id_usuario = vv.id_vendedor "
                     "WHERE d.id_venta = :id_venta",
                     {"id_venta": id_venta},
                 )
@@ -766,10 +755,6 @@ class BaseOracle:
                 "id_cliente": cabecera[4],
                 "nombre": cabecera[5],
             },
-            "vendedor": {
-                "id_vendedor": cabecera[6],
-                "nombre": cabecera[7],
-            },
             "items": [
                 {
                     "id_producto": fila[0],
@@ -780,6 +765,8 @@ class BaseOracle:
                     "subtotal": float(fila[5]) if fila[5] is not None else 0.0,
                     "costo_unitario": float(fila[6]) if fila[6] is not None else None,
                     "margen_unitario": float(fila[7]) if fila[7] is not None else None,
+                    "id_vendedor": fila[8],
+                    "vendedor_nombre": fila[9],
                 }
                 for fila in detalles
             ],
@@ -807,8 +794,8 @@ class BaseOracle:
 
                 if id_vendedor:
                     cursor.execute(
-                        "SELECT COUNT(*), COALESCE(SUM(monto_total), 0) FROM ventas "
-                        "WHERE id_vendedor = :id_vendedor",
+                        "SELECT COUNT(DISTINCT d.id_venta), COALESCE(SUM(d.subtotal), 0) "
+                        "FROM venta_detalle d WHERE d.id_vendedor = :id_vendedor",
                         {"id_vendedor": id_vendedor},
                     )
                 else:
@@ -820,9 +807,7 @@ class BaseOracle:
                 if id_vendedor:
                     cursor.execute(
                         "SELECT COALESCE(SUM(d.costo_unitario * d.cantidad), 0) "
-                        "FROM venta_detalle d "
-                        "INNER JOIN ventas v ON v.id_venta = d.id_venta "
-                        "WHERE v.id_vendedor = :id_vendedor",
+                        "FROM venta_detalle d WHERE d.id_vendedor = :id_vendedor",
                         {"id_vendedor": id_vendedor},
                     )
                 else:
@@ -857,24 +842,42 @@ class BaseOracle:
                 filtros = [f"v.fecha_venta >= ADD_MONTHS(CURRENT_DATE, -{meses})"]
                 params = {}
                 if id_vendedor:
-                    filtros.append("v.id_vendedor = :id_vendedor")
+                    filtros.append("d.id_vendedor = :id_vendedor")
                     params["id_vendedor"] = id_vendedor
                 where = " AND ".join(filtros)
-                cursor.execute(
-                    "SELECT EXTRACT(YEAR FROM v.fecha_venta) AS \"anio\", "
-                    "EXTRACT(MONTH FROM v.fecha_venta) AS \"mes\", "
-                    "TO_CHAR(v.fecha_venta, 'MON') AS \"mes_nombre\", "
-                    "SUM(v.monto_total) AS \"ingresos\", "
-                    "COUNT(*) AS \"total_ventas\", "
-                    "COALESCE(SUM(d.costo_unitario * d.cantidad), 0) AS \"costos\" "
-                    "FROM ventas v "
-                    "LEFT JOIN venta_detalle d ON d.id_venta = v.id_venta "
-                    f"WHERE {where} "
-                    "GROUP BY EXTRACT(YEAR FROM v.fecha_venta), EXTRACT(MONTH FROM v.fecha_venta), "
-                    "TO_CHAR(v.fecha_venta, 'MON') "
-                    "ORDER BY \"anio\" DESC, \"mes\" DESC",
-                    params,
-                )
+
+                if id_vendedor:
+                    cursor.execute(
+                        "SELECT EXTRACT(YEAR FROM v.fecha_venta) AS \"anio\", "
+                        "EXTRACT(MONTH FROM v.fecha_venta) AS \"mes\", "
+                        "TO_CHAR(v.fecha_venta, 'MON') AS \"mes_nombre\", "
+                        "COALESCE(SUM(d.subtotal), 0) AS \"ingresos\", "
+                        "COUNT(DISTINCT v.id_venta) AS \"total_ventas\", "
+                        "COALESCE(SUM(d.costo_unitario * d.cantidad), 0) AS \"costos\" "
+                        "FROM venta_detalle d "
+                        "JOIN ventas v ON v.id_venta = d.id_venta "
+                        f"WHERE {where} "
+                        "GROUP BY EXTRACT(YEAR FROM v.fecha_venta), EXTRACT(MONTH FROM v.fecha_venta), "
+                        "TO_CHAR(v.fecha_venta, 'MON') "
+                        "ORDER BY \"anio\" DESC, \"mes\" DESC",
+                        params,
+                    )
+                else:
+                    cursor.execute(
+                        "SELECT EXTRACT(YEAR FROM v.fecha_venta) AS \"anio\", "
+                        "EXTRACT(MONTH FROM v.fecha_venta) AS \"mes\", "
+                        "TO_CHAR(v.fecha_venta, 'MON') AS \"mes_nombre\", "
+                        "SUM(v.monto_total) AS \"ingresos\", "
+                        "COUNT(*) AS \"total_ventas\", "
+                        "COALESCE(SUM(d.costo_unitario * d.cantidad), 0) AS \"costos\" "
+                        "FROM ventas v "
+                        "LEFT JOIN venta_detalle d ON d.id_venta = v.id_venta "
+                        f"WHERE {where} "
+                        "GROUP BY EXTRACT(YEAR FROM v.fecha_venta), EXTRACT(MONTH FROM v.fecha_venta), "
+                        "TO_CHAR(v.fecha_venta, 'MON') "
+                        "ORDER BY \"anio\" DESC, \"mes\" DESC",
+                        params,
+                    )
                 filas = cursor.fetchall()
 
         meses_map = {
@@ -900,7 +903,7 @@ class BaseOracle:
             })
         return resultados
 
-    def obtener_productos_estancados(self, id_vendedor=None, limite=10):
+    def obtener_productos_estancados(self, id_vendedor=None):
         """Obtiene los productos con menor rotacion (menos vendidos)."""
         with self.conectar() as conexion:
             with conexion.cursor() as cursor:
@@ -909,13 +912,12 @@ class BaseOracle:
                         "SELECT p.id_producto, p.nombre, COALESCE(SUM(d.cantidad), 0) AS total_vendido "
                         "FROM productos p "
                         "INNER JOIN producto_vendedor pv ON pv.id_producto = p.id_producto "
-                        "LEFT JOIN venta_detalle d ON d.id_producto = p.id_producto "
-                        "LEFT JOIN ventas v ON v.id_venta = d.id_venta AND v.id_vendedor = :id_vendedor "
+                        "LEFT JOIN venta_detalle d ON d.id_producto = p.id_producto AND d.id_vendedor = :id_vendedor "
                         "WHERE pv.id_vendedor = :id_vendedor2 "
                         "GROUP BY p.id_producto, p.nombre "
-                        "ORDER BY total_vendido ASC "
-                        "FETCH NEXT :limite ROWS ONLY",
-                        {"id_vendedor": id_vendedor, "id_vendedor2": id_vendedor, "limite": limite},
+                        "HAVING COALESCE(SUM(d.cantidad), 0) > 0 "
+                        "ORDER BY total_vendido ASC",
+                        {"id_vendedor": id_vendedor, "id_vendedor2": id_vendedor},
                     )
                 else:
                     cursor.execute(
@@ -923,9 +925,8 @@ class BaseOracle:
                         "FROM productos p "
                         "LEFT JOIN venta_detalle d ON d.id_producto = p.id_producto "
                         "GROUP BY p.id_producto, p.nombre "
-                        "ORDER BY total_vendido ASC "
-                        "FETCH NEXT :limite ROWS ONLY",
-                        {"limite": limite},
+                        "HAVING COALESCE(SUM(d.cantidad), 0) > 0 "
+                        "ORDER BY total_vendido ASC",
                     )
                 filas = cursor.fetchall()
         return [
@@ -947,9 +948,8 @@ class BaseOracle:
                         "SUM(d.cantidad) AS \"cantidad_vendida\", "
                         "SUM(d.subtotal) AS \"ingresos_totales\" "
                         "FROM venta_detalle d "
-                        "INNER JOIN ventas v ON v.id_venta = d.id_venta "
                         "LEFT JOIN productos p ON p.id_producto = d.id_producto "
-                        "WHERE v.id_vendedor = :id_vendedor "
+                        "WHERE d.id_vendedor = :id_vendedor "
                         "GROUP BY d.id_producto, p.nombre "
                         "ORDER BY \"cantidad_vendida\" DESC "
                         "FETCH NEXT :limite ROWS ONLY",

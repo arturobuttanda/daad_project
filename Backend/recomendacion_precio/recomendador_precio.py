@@ -1,16 +1,6 @@
 from __future__ import annotations
 
-"""Recomendador de precios basado en TF-IDF + Similitud Coseno.
-
-Implementa la clase RecomendadorPrecio que encapsula toda la lógica
-matemática de búsqueda de productos similares y cálculo de precio
-ponderado usando aprendizaje automático clásico.
-
-Arquitectura:
-    Frontend → FastAPI → RecomendadorPrecio → Oracle
-
-La lógica matemática reside únicamente en este módulo.
-"""
+"""Recomendador de precios via TF-IDF + similitud coseno."""
 
 from typing import Any
 import unicodedata
@@ -24,13 +14,9 @@ from sentence_transformers import SentenceTransformer
 
 bitacora = logging.getLogger("daad-backend")
 
-# Umbral mínimo de similitud coseno para incluir un producto
+# Similitud coseno
 _SIMILITUD_MINIMA: float = 0.10
-
-# Cantidad máxima de productos similares a considerar
 _LIMITE_SIMILARES: int = 10
-
-# Mínimo de similares para una recomendación robusta
 _MINIMO_ROBUSTO: int = 3
 
 
@@ -59,26 +45,7 @@ def _normalizar_texto(valor: object | None) -> str:
 
 
 class RecomendadorPrecio:
-    """Servicio de recomendación de precios por similitud semántica TF-IDF.
-
-    Construye una matriz TF-IDF sobre el catálogo de productos de Oracle y
-    calcula la similitud coseno entre el producto objetivo y todos los demás.
-    El precio recomendado se obtiene como promedio ponderado por similitud.
-
-    Uso:
-        recomendador = RecomendadorPrecio()
-        resultado = recomendador.recomendar(
-            id_producto="PROD-001",
-            nombre="Television TCL",
-            marca="TCL",
-            categoria="Electronica",
-            precio_actual=15000.0,
-        )
-
-    El resultado es un diccionario con precio_recomendado y métricas de
-    similitud. La instancia se puede reutilizar; el catálogo se recarga
-    automáticamente cuando la firma cambia.
-    """
+    """Recomienda precio por similitud semantica TF-IDF + coseno + promedio ponderado."""
 
     def __init__(self) -> None:
         self._modelo: SentenceTransformer | None = None
@@ -228,42 +195,15 @@ class RecomendadorPrecio:
     # Métodos privados — cálculo del precio
     # ------------------------------------------------------------------
 
-    def _aplicar_filtro_iqr(self, similares: list[tuple[float, dict[str, Any]]]) -> list[tuple[float, dict[str, Any]]]:
-        if len(similares) < 4:
-            return similares
-        precios = np.array([float(p["precio_actual"]) for _, p in similares])
-        q1, q3 = np.percentile(precios, [25, 75])
-        iqr = q3 - q1
-        limite_inferior = q1 - 1.5 * iqr
-        limite_superior = q3 + 1.5 * iqr
-        return [(sim, p) for sim, p in similares if limite_inferior <= float(p["precio_actual"]) <= limite_superior]
-
     def _precio_ponderado(
         self,
         similares: list[tuple[float, dict[str, Any]]],
-        estimacion_robusta: bool = False,
     ) -> float:
-
-        if estimacion_robusta:
-            similares_filtrados = self._aplicar_filtro_iqr(similares)
-            if len(similares_filtrados) > 0:
-                similares = similares_filtrados
-                
-            suma_pesos = sum(sim ** 3 for sim, _ in similares)
-            if suma_pesos <= 0:
-                precios = [float(p["precio_actual"]) for _, p in similares]
-                return float(np.mean(precios))
-            suma_ponderada = sum(float(p["precio_actual"]) * (sim ** 3) for sim, p in similares)
-            return suma_ponderada / suma_pesos
-
-        suma_pesos = sum(sim for sim, _ in similares)
+        suma_pesos = sum(sim ** 3 for sim, _ in similares)
         if suma_pesos <= 0:
             precios = [float(p["precio_actual"]) for _, p in similares]
             return float(np.mean(precios))
-
-        suma_ponderada = sum(
-            float(p["precio_actual"]) * sim for sim, p in similares
-        )
+        suma_ponderada = sum(float(p["precio_actual"]) * (sim ** 3) for sim, p in similares)
         return suma_ponderada / suma_pesos
 
     # ------------------------------------------------------------------
@@ -323,7 +263,7 @@ class RecomendadorPrecio:
                 "advertencia": advertencia,
             }
 
-        precio_recomendado = self._precio_ponderado(similares, estimacion_robusta=estimacion_robusta)
+        precio_recomendado = self._precio_ponderado(similares)
         similitudes_valores = [sim for sim, _ in similares]
 
         similitud_maxima = float(max(similitudes_valores))

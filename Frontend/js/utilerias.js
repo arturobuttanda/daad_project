@@ -89,10 +89,11 @@ function cerrarSesion() {
   }
 }
 
+const TIEMPO_ESPERA_API = 30000;
+
 function eventoFetch(url, opciones = {}) {
-  const TIEMPO_ESPERA = 15000;
   const controlador = new AbortController();
-  const temporizador = setTimeout(() => controlador.abort(), TIEMPO_ESPERA);
+  const temporizador = setTimeout(() => controlador.abort(), TIEMPO_ESPERA_API);
 
   const opcionesFinales = {
     headers: { "Content-Type": "application/json", ...opciones.headers },
@@ -108,7 +109,11 @@ function eventoFetch(url, opciones = {}) {
           throw new Error("Error de conexion con el servidor.");
         }
         return res.json().then((err) => {
-          throw new Error(err.detail || "Error en la peticion");
+          const errMsg = err.detail || "Error en la peticion";
+          if (res.status >= 500) {
+            throw new Error("Error en el servidor. Intenta de nuevo.");
+          }
+          throw new Error(errMsg);
         });
       }
       return res.json();
@@ -117,13 +122,11 @@ function eventoFetch(url, opciones = {}) {
       clearTimeout(temporizador);
       if (err.name === "AbortError") {
         throw new Error(
-          "El servidor no respondio a tiempo. Verifica que el backend este corriendo."
+          "El servidor tardo demasiado en responder. Verifica que el backend este corriendo."
         );
       }
-      if (err.message === "Failed to fetch") {
-        throw new Error(
-          "No se pudo conectar con el servidor. Verifica que el backend este corriendo."
-        );
+      if (err.message === "Failed to fetch" || err.message === "NetworkError when attempting to fetch resource." || err.message === "Load failed") {
+        throw new Error("No se pudo conectar con el servidor.");
       }
       throw err;
     });

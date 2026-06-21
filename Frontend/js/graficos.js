@@ -39,50 +39,6 @@ const Graficos = {
   },
 
   /**
-   * Grafico de dona.
-   * @param {string} idContenedor
-   * @param {Array} segmentos - Array de {etiqueta, valor, color?}
-   * @param {string} titulo
-   */
-  dona: function (idContenedor, segmentos, titulo = "") {
-    const contenedor = document.getElementById(idContenedor);
-    if (!contenedor || !segmentos || segmentos.length === 0) return;
-
-    const total = segmentos.reduce((s, seg) => s + seg.valor, 0) || 1;
-    let conicGradients = [];
-    let acumulado = 0;
-
-    segmentos.forEach((seg, i) => {
-      const color = seg.color || COLORES[i % COLORES.length];
-      const porcentaje = (seg.valor / total) * 100;
-      const inicio = acumulado;
-      const fin = acumulado + porcentaje;
-      conicGradients.push(`${color} ${inicio}% ${fin}%`);
-      acumulado = fin;
-    });
-
-    let html = `<div class="grafico-contenedor">`;
-    if (titulo) html += `<h3>${titulo}</h3>`;
-    html += `<div class="dona-contenedor">`;
-    html += `<div class="dona" style="background: conic-gradient(${conicGradients.join(", ")})"></div>`;
-    html += `<div class="dona-leyenda">`;
-
-    segmentos.forEach((seg, i) => {
-      const color = seg.color || COLORES[i % COLORES.length];
-      const porcentaje = ((seg.valor / total) * 100).toFixed(1);
-      html += `
-        <div class="dona-leyenda-item">
-          <span class="color" style="background:${color}"></span>
-          <span>${seg.etiqueta}: ${porcentaje}%</span>
-        </div>
-      `;
-    });
-
-    html += `</div></div></div>`;
-    contenedor.innerHTML = html;
-  },
-
-  /**
    * Grafico de lineas SVG con soporte para multiples series.
    * @param {string} idContenedor
    * @param {Array} series - Array de {etiqueta, valores: [{etiqueta, valor}], color?}

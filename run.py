@@ -75,6 +75,7 @@ def principal():
 
     # Iniciar backend con uvicorn
     proceso_backend = None
+    print("Levantando backend...", end="", flush=True)
     try:
         comando_backend = [
             str(python), "-m", "uvicorn", "Backend.app:app",
@@ -82,7 +83,25 @@ def principal():
         ]
         proceso_backend = iniciar_proceso(comando_backend, cwd=RAIZ, env=env, stdout=log_out, stderr=log_err)
     except Exception as exc:
-        print(f"No se pudo iniciar el backend: {exc}")
+        print(f"\nNo se pudo iniciar el backend: {exc}")
+
+    # Esperar a que el backend esté listo
+    backend_listo = False
+    for intento in range(50):
+        try:
+            with urllib.request.urlopen("http://127.0.0.1:8000/api/ping", timeout=3):
+                print(" listo.")
+                backend_listo = True
+                break
+        except Exception:
+            time.sleep(1)
+
+    if not backend_listo:
+        print(" No se pudo conectar con el backend.")
+        if proceso_backend:
+            proceso_backend.terminate()
+            proceso_backend.wait()
+        return
 
     # Iniciar servidor estatico para el frontend HTML
     proceso_frontend = None
@@ -111,19 +130,7 @@ def principal():
     print("\n" + "="*60)
     print("  Frontend: http://127.0.0.1:5180/iniciar-sesion.html")
     print("  Backend:  http://127.0.0.1:8000")
-
-    # Esperar a que el backend esté listo antes de abrir el navegador
-    print("Esperando que el backend esté listo...")
-    for intento in range(15):
-        try:
-            with urllib.request.urlopen("http://127.0.0.1:8000/api/health", timeout=3):
-                print("Backend listo.")
-                break
-        except Exception:
-            if intento < 14:
-                time.sleep(1)
-            else:
-                print("ADVERTENCIA: El backend no responde. Revisa los logs.")
+    print("="*60)
 
     try:
         webbrowser.open("http://127.0.0.1:5180/iniciar-sesion.html")

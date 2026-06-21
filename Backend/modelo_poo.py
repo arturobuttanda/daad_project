@@ -3,7 +3,7 @@ from __future__ import annotations
 from abc import ABC
 from datetime import datetime, timedelta
 import math
-from typing import Any, Iterable, Sequence
+from typing import Iterable, Sequence
 
 import numpy as np
 
@@ -36,17 +36,6 @@ def _validar_nombre(nombre: str) -> str:
     raise ValueError("El nombre no puede estar vacio.")
   return nombre_limpio
 
-
-def _validar_contrasena(contrasena: str) -> str:
-  """Valida que la contrasena cumpla los criterios minimos."""
-  pass_limpio = _limpiar_texto(contrasena)
-  if len(pass_limpio) < 8:
-    raise ValueError("La contrasena debe tener al menos 8 caracteres.")
-  if not any(caracter.isupper() for caracter in pass_limpio):
-    raise ValueError("La contrasena debe incluir una mayuscula.")
-  if not any(caracter.isdigit() for caracter in pass_limpio):
-    raise ValueError("La contrasena debe incluir un numero.")
-  return pass_limpio
 
 
 def _producto_a_diccionario(producto: Producto | dict[str, object | None]) -> dict[str, object | None]:
@@ -243,18 +232,6 @@ class Producto:
       "imagen_url": self.imagen_url,
     }
 
-  def a_fila(self) -> dict[str, object | None]:
-    return {
-      "id_producto": self.id_producto,
-      "nombre": self.nombre,
-      "marca": self.marca or None,
-      "categoria": self.categoria or None,
-      "precio_actual": self.precio_actual,
-      "stock": self.stock,
-      "precio_fabricacion": self.precio_fabricacion,
-      "imagen_url": self.imagen_url,
-    }
-
   def actualizar_datos(
     self,
     nombre: str | None = None,
@@ -306,31 +283,6 @@ class Venta:
     self.cantidad = int(cantidad)
     self.fecha_venta = fecha_venta
     self.total_pagado = float(total_pagado)
-
-  @property
-  def subtotal_unitario(self) -> float | None:
-    if self.cantidad <= 0:
-      return None
-    return round(self.total_pagado / self.cantidad, 2)
-
-  def a_diccionario(self) -> dict[str, object | None]:
-    return {
-      "id_venta": self.id_venta,
-      "producto": self.producto.a_diccionario(),
-      "cantidad": self.cantidad,
-      "fecha_venta": self.fecha_venta.isoformat() if hasattr(self.fecha_venta, "isoformat") else str(self.fecha_venta),
-      "total_pagado": self.total_pagado,
-    }
-
-  def a_fila(self) -> dict[str, object | None]:
-    return {
-      "id_venta": self.id_venta,
-      "id_producto": self.producto.id_producto,
-      "cantidad": self.cantidad,
-      "fecha_venta": self.fecha_venta,
-      "precio_unitario": self.subtotal_unitario,
-      "subtotal": self.total_pagado,
-    }
 
   @classmethod
   def desde_detalle(
@@ -406,18 +358,6 @@ class Informe:
       productos_stock_bajo=productos_stock_bajo,
     )
 
-  def a_diccionario(self) -> dict[str, object | None]:
-    return {
-      "ingresos_totales": self.ingresos_totales,
-      "costos_totales": self.costos_totales,
-      "margen_ganancia": self.margen_ganancia,
-      "alertas_stock_bajo": [producto.a_diccionario() for producto in self.alertas_stock_bajo],
-      "total_productos": self.total_productos,
-      "total_vendedores": self.total_vendedores,
-      "total_clientes": self.total_clientes,
-      "total_ventas": self.total_ventas,
-      "productos_stock_bajo": self.productos_stock_bajo,
-    }
 
 
 # ──────────────────────────────────────────────────────────────────────────────
@@ -503,41 +443,6 @@ class Vendedor(Persona):
     })
     return base
 
-  def a_diccionario_vendedor(self) -> dict[str, object | None]:
-    """Diccionario publico con datos del vendedor para respuestas de API."""
-    return {
-      "id_vendedor": self.id_vendedor,
-      "nombre_vendedor": self.nombre,
-      "codigo_vendedor": self.codigo_vendedor,
-      "especialidad": self.especialidad or None,
-    }
-
-  @classmethod
-  def desde_fila_vendedor(
-    cls,
-    fila_usuario: Sequence[object],
-    codigo_vendedor: str | None = None,
-    especialidad: str | None = None,
-    objetivo_ventas: float | None = None,
-    contrasena_hash: str | None = None,
-  ) -> "Vendedor":
-    """Construye un Vendedor a partir de una fila de la tabla usuarios
-    mas datos opcionales de la tabla vendedores."""
-    id_usuario = str(fila_usuario[0])
-    nombre = str(fila_usuario[1])
-    telefono = fila_usuario[2] if len(fila_usuario) > 2 else None
-    correo = str(fila_usuario[3]) if len(fila_usuario) > 3 else ""
-    return cls(
-      id_persona=id_usuario,
-      nombre=nombre,
-      telefono=telefono,
-      correo=correo,
-      id_vendedor=id_usuario,
-      codigo_vendedor=codigo_vendedor or id_usuario,
-      especialidad=especialidad,
-      objetivo_ventas=objetivo_ventas,
-      contrasena_hash=contrasena_hash,
-    )
 
 
 # ──────────────────────────────────────────────────────────────────────────────
@@ -607,6 +512,7 @@ def crear_venta_por_item(
     "costo_unitario": float(precio_fabricacion) if precio_fabricacion is not None else None,
     "subtotal": subtotal,
     "margen_unitario": round(precio_unitario - float(precio_fabricacion), 2) if precio_fabricacion is not None else None,
+    "id_vendedor": vendedor.id_usuario if vendedor is not None else None,
   }
 
   return venta, detalle, producto.stock, subtotal, ganancia
@@ -623,24 +529,7 @@ def calcular_recomendacion_precio(
   catalogo: list[dict[str, object | None]] | None = None,
   limite: int = 5,
 ) -> dict[str, object | None]:
-  """Calcula una recomendacion de precio completa usando historial y similitud TF-IDF.
-
-  Analiza el precio actual contra el historial y el mercado comparable
-  para generar una senial de compra, precio sugerido y puntuacion vectorial.
-  La similitud de productos se delega al RecomendadorPrecio (TF-IDF).
-
-  Argumentos:
-    producto: Producto a analizar (objeto o dict).
-    historial: Lista de diccionarios con 'fecha' y 'precio'.
-    competencia_promedio: Ignorado. Se conserva por compatibilidad de firma.
-    catalogo: Ignorado. Se conserva por compatibilidad de firma.
-    limite: Numero maximo de similares a considerar.
-
-  Retorna:
-    Dict con signal, suggested_price, reason, margin_percent,
-    market_reference_*, trend_label, estimated_buy_date,
-    buy_now, buy_reason, similar_products.
-  """
+  """Analiza precio vs historial/mercado; retorna senial de compra y precio sugerido."""
   producto_dict = _producto_a_diccionario(producto)
   precio_actual = float(producto_dict.get("precio_actual") or 0)
   precio_costo = float(producto_dict.get("precio_fabricacion") or 0)
